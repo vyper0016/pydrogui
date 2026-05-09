@@ -1,0 +1,89 @@
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PyDroGUI RISC-V Simulator</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; line-height: 1.4; max-width: 600px; }
+      h1 { margin-bottom: 24px; color: #333; }
+      .control-section { margin-bottom: 32px; }
+      .row { margin: 16px 0; display: flex; flex-direction: column; }
+      .row label { font-weight: bold; margin-bottom: 6px; }
+      .row input { padding: 8px 12px; font-family: monospace; font-size: 14px; border: 1px solid #ddd; border-radius: 4px; }
+      .row input:read-only { background-color: #f5f5f5; }
+      button { padding: 12px 24px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; font-weight: bold; }
+      button:hover { background-color: #0056b3; }
+      button:active { background-color: #003d82; }
+      .info-text { color: #666; font-size: 14px; margin-top: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>RISC-V Simulator</h1>
+
+    <div class="control-section">
+      <div class="row">
+        <button id="btnStep">Step</button>
+        <div class="info-text">Execute one instruction</div>
+      </div>
+      <div class="row">
+        <button id="btnReset" style="background-color: #6c757d;">Reset</button>
+        <div class="info-text">Reset the simulator</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <label for="pcValue">Program Counter (PC)</label>
+      <input id="pcValue" type="text" readonly placeholder="0x0" />
+    </div>
+
+    <div class="row">
+      <label for="instructionValue">Last Instruction (Disassembled)</label>
+      <input id="instructionValue" type="text" readonly placeholder="..." />
+    </div>
+
+    <script>
+      const pcInput = document.getElementById('pcValue');
+      const instructionInput = document.getElementById('instructionValue');
+      const stepBtn = document.getElementById('btnStep');
+      const resetBtn = document.getElementById('btnReset');
+
+      async function updateDisplay() {
+        try {
+          const pcResponse = await fetch('/read-register/pc');
+          const pc = await pcResponse.text();
+          pcInput.value = pc;
+
+          const instResponse = await fetch('/disassemble-last-instruction');
+          const instruction = await instResponse.text();
+          instructionInput.value = instruction;
+        } catch (err) {
+          pcInput.value = 'Error: ' + err.message;
+        }
+      }
+
+      async function step() {
+        try {
+          await fetch('/step', { method: 'POST' });
+          await updateDisplay();
+        } catch (err) {
+          instructionInput.value = 'Error: ' + err.message;
+        }
+      }
+
+      async function reset() {
+        try {
+          await fetch('/reset', { method: 'POST' });
+          await updateDisplay();
+        } catch (err) {
+          instructionInput.value = 'Error: ' + err.message;
+        }
+      }
+
+      stepBtn.addEventListener('click', step);
+      resetBtn.addEventListener('click', reset);
+      updateDisplay();
+    </script>
+  </body>
+</html>

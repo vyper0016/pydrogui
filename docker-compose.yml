@@ -1,0 +1,13 @@
+services:
+  pydrogui:
+    build:
+      context: .
+    image: pydrogui:latest
+    container_name: pydrogui
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app/:/app/
