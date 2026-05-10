@@ -26,12 +26,10 @@ def step() -> str:
 
 @app.get('/disassemble-last-instruction')
 def disassemble_last_instruction() -> str:
-    """Get the disassembled representation of the last executed instruction."""
     return m.disassemble_last_instruction()
 
 @app.get('/read-register/{reg_name}')
 def read_register(reg_name: str) -> str:
-    """Read the value of a register."""
     try:
         value = m.read_register(reg_name)
         return str(value)
@@ -40,7 +38,6 @@ def read_register(reg_name: str) -> str:
 
 @app.post('/reset')
 def reset() -> str:
-    """Reset the simulator to its initial state."""
     global m
     m = RISCV64('/riscv/rv64-linux-4.15.0-gcc-7.2.0-64mb.bbl', dtb=True)
     m.set_verbosity(0)
