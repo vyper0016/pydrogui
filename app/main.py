@@ -1,5 +1,6 @@
 from _pydrofoil import RISCV64
 import fastapi
+from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -18,12 +19,6 @@ def test_page() -> FileResponse:
 def hello() -> str:
     return 'Hello, world!'
 
-@app.post('/step')
-def step() -> str:
-    """Execute a single instruction"""
-    m.step()
-    return 'success'
-
 @app.get('/disassemble-last-instruction')
 def disassemble_last_instruction() -> str:
     return m.disassemble_last_instruction()
@@ -33,8 +28,34 @@ def read_register(reg_name: str) -> str:
     try:
         value = m.read_register(reg_name)
         return str(value)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        return f"Error: {str(e)}"
+        raise HTTPException(status_code=400, detail=str(e))
+    
+@app.get('/read-memory/{address}/{bits}')
+def read_memory(address: int, bits: int) -> int:
+    try:
+        value = m.read_memory(address, bits)
+        return value
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post('/step')
+def step() -> str:
+    """Execute a single instruction"""
+    m.step()
+    return 'success'
+
+@app.post('/run/{steps}')
+def run(steps: int) -> str:
+    '''Execute a specified number of instructions'''
+    try:
+        m.run(steps)
+        return 'success'
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post('/reset')
 def reset() -> str:
