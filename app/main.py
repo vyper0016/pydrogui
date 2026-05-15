@@ -28,11 +28,13 @@ def disassemble_last_instruction() -> str:
 def read_register(reg_name: str) -> str:
     try:
         value = m.read_register(reg_name)
+        # read_register('cur_privilege') returns a str?
+        value = hex(value.signed()) if 'signed' in dir(value) else value
         return str(value)
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=f"{reg_name}: {e}")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=f"{reg_name}: {e}")
 
 @app.get('/read-registers-batch')
 def read_registers_batch(reg_names: List[str] = Query(...)) -> dict:
