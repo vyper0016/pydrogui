@@ -87,6 +87,7 @@ export default function App() {
   const [regs, setRegs] = useState<RegMap>({})
   const [instruction, setInstruction] = useState('')
   const [error, setError] = useState('')
+  const [runSteps, setRunSteps] = useState(100)
 
   async function updateDisplay() {
     try {
@@ -105,6 +106,15 @@ export default function App() {
   async function step() {
     try {
       await apiFetch('/step', 'POST')
+      await updateDisplay()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function run() {
+    try {
+      await apiFetch(`/run?steps=${runSteps}`, 'POST')
       await updateDisplay()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -136,6 +146,24 @@ export default function App() {
               Step
             </button>
             <span className="text-sm text-gray-500">Execute one instruction</span>
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min={1}
+                value={runSteps}
+                onChange={(e) => setRunSteps(Number(e.target.value))}
+                className="w-24 px-3 py-3 border border-gray-300 rounded text-base"
+              />
+              <button
+                onClick={run}
+                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded cursor-pointer text-base"
+              >
+                Run
+              </button>
+            </div>
+            <span className="text-sm text-gray-500">Execute N instructions</span>
           </div>
           <div className="flex flex-col gap-1">
             <button
