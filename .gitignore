@@ -1,1 +1,40 @@
+# Python
 __pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# FastAPI / uvicorn
+*.log
+app/out.txt
+
+# Node / Vite
+frontend-pydrogui/node_modules/
+frontend-pydrogui/dist/
+frontend-pydrogui/dist-ssr/
+frontend-pydrogui/*.local
+
+# Large binaries
+pypy-pydrofoil-scripting-experimental.tar.bz2
+riscv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.sw?
+
+# Docker
+.dockerignore

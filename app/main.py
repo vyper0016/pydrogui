@@ -8,12 +8,12 @@ app = fastapi.FastAPI(
     title="PyDroGUI API",
     description="RISC-V simulator control and inspection API"
 )
-app.mount('/static', StaticFiles(directory='/app'), name='static')
+app.mount('/static', StaticFiles(directory='/app/static'), name='static')
 
 @app.get('/test', tags=["UI"])
 def test_page() -> FileResponse:
     """Serve the test HTML page."""
-    return FileResponse('/app/test.html')
+    return FileResponse('/app/static/test.html')
 
 @app.get('/hello')
 def hello() -> str:
