@@ -54,7 +54,7 @@ def step() -> str:
     m.step()
     return 'success'
 
-@app.post('/run/{steps}')
+@app.post('/run')
 def run(steps: int) -> str:
     '''Execute a specified number of instructions'''
     try:

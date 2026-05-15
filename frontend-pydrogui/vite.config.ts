@@ -7,10 +7,10 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/read-register': 'http://localhost:8000',
-      '/disassemble-last-instruction': 'http://localhost:8000',
-      '/step': 'http://localhost:8000',
-      '/reset': 'http://localhost:8000',
+      '/api': {
+        target: 'http://localhost:8000',
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
     },
   },
 })

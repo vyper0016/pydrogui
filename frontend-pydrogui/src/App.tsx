@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
 
+const API = '/api'
+
 async function apiFetch(path: string, method = 'GET') {
-  const res = await fetch(path, { method })
+  const res = await fetch(API + path, { method })
   if (!res.ok) throw new Error(await res.text())
   return res.text()
 }
 
 async function apiFetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(path)
+  const res = await fetch(API + path)
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
