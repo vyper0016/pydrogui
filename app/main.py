@@ -1,6 +1,7 @@
 from _pydrofoil import RISCV64
 import fastapi
 from fastapi import HTTPException
+from typing import List
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -32,7 +33,11 @@ def read_register(reg_name: str) -> str:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
+@app.post('/read-registers-batch')
+def read_registers_batch(reg_names: List[str]) -> dict:
+    return {reg: read_register(reg) for reg in reg_names}
+
 @app.get('/read-memory/{address}/{bits}')
 def read_memory(address: int, bits: int) -> int:
     try:
@@ -40,7 +45,6 @@ def read_memory(address: int, bits: int) -> int:
         return value
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
 
 @app.post('/step')
 def step() -> str:
