@@ -1,15 +1,61 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const API = '/api'
+const SESSION_KEY = 'pydrogui.session_id'
 
-async function apiFetch(path: string, method = 'GET') {
-  const res = await fetch(API + path, { method })
+let sessionId: string | null = localStorage.getItem(SESSION_KEY)
+
+async function createSession(): Promise<string> {
+  const res = await fetch(API + '/sessions', { method: 'POST' })
+  if (!res.ok) throw new Error(`Create session failed: ${await res.text()}`)
+  const data = await res.json() as { session_id: string }
+  sessionId = data.session_id
+  localStorage.setItem(SESSION_KEY, sessionId)
+  return sessionId
+}
+
+async function deleteSession(sid: string): Promise<void> {
+  try {
+    await fetch(`${API}/sessions/${encodeURIComponent(sid)}`, { method: 'DELETE' })
+  } catch {
+    // best-effort; server will purge expired anyway
+  }
+}
+
+async function ensureSession(): Promise<string> {
+  if (sessionId) return sessionId
+  return await createSession()
+}
+
+async function rawFetch(path: string, method: string): Promise<Response> {
+  const sid = await ensureSession()
+  return fetch(API + path, { method, headers: { 'X-Session-Id': sid } })
+}
+
+class SessionExpiredError extends Error {
+  constructor() { super('Session expired. Click "New session" to start a new one.') }
+}
+
+async function checkSession(res: Response): Promise<Response> {
+  if (res.status === 404) {
+    const body = await res.clone().text()
+    if (body.includes('Session not found') || body.includes('expired')) {
+      sessionId = null
+      localStorage.removeItem(SESSION_KEY)
+      throw new SessionExpiredError()
+    }
+  }
+  return res
+}
+
+async function apiFetch(path: string, method = 'GET'): Promise<string> {
+  const res = await checkSession(await rawFetch(path, method))
   if (!res.ok) throw new Error(await res.text())
   return res.text()
 }
 
-async function apiFetchJson<T>(path: string): Promise<T> {
-  const res = await fetch(API + path)
+async function apiFetchJson<T>(path: string, method = 'GET'): Promise<T> {
+  const res = await checkSession(await rawFetch(path, method))
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
@@ -88,6 +134,7 @@ export default function App() {
   const [instruction, setInstruction] = useState('')
   const [error, setError] = useState('')
   const [runSteps, setRunSteps] = useState(100)
+  const inited = useRef(false)
 
   async function updateDisplay() {
     try {
@@ -130,12 +177,38 @@ export default function App() {
     }
   }
 
-  useEffect(() => { updateDisplay() }, [])
+  async function newSession() {
+    try {
+      const old = sessionId
+      sessionId = null
+      localStorage.removeItem(SESSION_KEY)
+      if (old) await deleteSession(old)
+      await createSession()
+      await updateDisplay()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  useEffect(() => {
+    if (inited.current) return
+    inited.current = true
+    updateDisplay()
+  }, [])
 
   return (
     <div className="mx-auto p-6 font-sans grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 max-w-6xl">
       <div>
         <h1 className="text-2xl font-bold text-gray-800 mb-6">RISC-V Simulator</h1>
+
+        <div className="mb-4">
+          <button
+            onClick={newSession}
+            className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-100 cursor-pointer"
+          >
+            New session
+          </button>
+        </div>
 
         <div className="mb-8 space-y-4">
           <div className="flex flex-col gap-1">

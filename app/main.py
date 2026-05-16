@@ -1,9 +1,12 @@
-from _pydrofoil import RISCV64
-import fastapi
-from fastapi import HTTPException, Query
 from typing import List
+
+import fastapi
+from fastapi import HTTPException, Query, Depends
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+
+import sessions
+from sessions import Session, SESSION_TTL_SECONDS
 
 app = fastapi.FastAPI(
     title="PyDroGUI API",
@@ -11,24 +14,41 @@ app = fastapi.FastAPI(
 )
 app.mount('/static', StaticFiles(directory='/app/static'), name='static')
 
+
+@app.post('/sessions', tags=["Sessions"])
+def create_session() -> dict:
+    """Create new simulator session. Returns session_id to pass as X-Session-Id header."""
+    sid = sessions.create()
+    return {"session_id": sid, "ttl_seconds": SESSION_TTL_SECONDS}
+
+
+@app.delete('/sessions/{session_id}', tags=["Sessions"])
+def delete_session(session_id: str) -> str:
+    if not sessions.delete(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    return 'deleted'
+
+
 @app.get('/test', tags=["UI"])
 def test_page() -> FileResponse:
     """Serve the test HTML page."""
     return FileResponse('/app/static/test.html')
 
+
 @app.get('/hello')
 def hello() -> str:
     return 'Hello, world!'
 
+
 @app.get('/disassemble-last-instruction')
-def disassemble_last_instruction() -> str:
-    return m.disassemble_last_instruction()
+def disassemble_last_instruction(session: Session = Depends(sessions.get)) -> str:
+    return session.machine.disassemble_last_instruction()
+
 
 @app.get('/read-register/{reg_name}')
-def read_register(reg_name: str) -> str:
+def read_register(reg_name: str, session: Session = Depends(sessions.get)) -> str:
     try:
-        value = m.read_register(reg_name)
-        # read_register('cur_privilege') returns a str?
+        value = session.machine.read_register(reg_name)
         value = hex(value.signed()) if 'signed' in dir(value) else value
         return str(value)
     except ValueError as e:
@@ -36,38 +56,41 @@ def read_register(reg_name: str) -> str:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"{reg_name}: {e}")
 
+
 @app.get('/read-registers-batch')
-def read_registers_batch(reg_names: List[str] = Query(...)) -> dict:
-    return {reg: read_register(reg) for reg in reg_names}
+def read_registers_batch(
+    reg_names: List[str] = Query(...),
+    session: Session = Depends(sessions.get),
+) -> dict:
+    return {reg: read_register(reg, session) for reg in reg_names}
+
 
 @app.get('/read-memory/{address}/{bits}')
-def read_memory(address: int, bits: int) -> int:
+def read_memory(address: int, bits: int, session: Session = Depends(sessions.get)) -> int:
     try:
-        value = m.read_memory(address, bits)
-        return value
+        return session.machine.read_memory(address, bits)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
 @app.post('/step')
-def step() -> str:
+def step(session: Session = Depends(sessions.get)) -> str:
     """Execute a single instruction"""
-    m.step()
+    session.machine.step()
     return 'success'
 
+
 @app.post('/run')
-def run(steps: int) -> str:
-    '''Execute a specified number of instructions'''
+def run(steps: int, session: Session = Depends(sessions.get)) -> str:
+    """Execute a specified number of instructions"""
     try:
-        m.run(steps)
+        session.machine.run(steps)
         return 'success'
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.post('/reset')
-def reset() -> str:
-    global m
-    m = RISCV64('/riscv/rv64-linux-4.15.0-gcc-7.2.0-64mb.bbl', dtb=True)
-    m.set_verbosity(0)
-    return 'Simulator reset successfully'
 
-reset()
+@app.post('/reset')
+def reset(session: Session = Depends(sessions.get)) -> str:
+    session.reset_machine()
+    return 'Simulator reset successfully'
