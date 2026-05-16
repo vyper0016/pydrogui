@@ -1,3 +1,4 @@
+import logging
 from typing import List
 
 import fastapi
@@ -7,6 +8,11 @@ from fastapi.staticfiles import StaticFiles
 
 import sessions
 from sessions import Session, SESSION_TTL_SECONDS
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
 app = fastapi.FastAPI(
     title="PyDroGUI API",
