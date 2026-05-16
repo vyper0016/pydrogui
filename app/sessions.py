@@ -7,21 +7,18 @@ from fastapi import HTTPException, Header
 
 from _pydrofoil import RISCV64
 
+import binaries
+
 SESSION_TTL_SECONDS = 30 * 60
 
 log = logging.getLogger(__name__)
 
-
-def _new_machine() -> RISCV64:
-    m = RISCV64('/riscv/rv64-linux-4.15.0-gcc-7.2.0-64mb.bbl', dtb=True)
-    m.set_verbosity(0)
-    return m
-
-
 class Session:
-    def __init__(self) -> None:
-        self.machine = _new_machine()
+    def __init__(self, binary_id: str) -> None:
+        self.binary_id = binary_id
+        self.binary_path = binaries.resolve(binary_id)
         self.last_access = time.monotonic()
+        self.reset_machine()
 
     def touch(self) -> None:
         self.last_access = time.monotonic()
@@ -30,35 +27,44 @@ class Session:
         return now - self.last_access > SESSION_TTL_SECONDS
 
     def reset_machine(self) -> None:
-        self.machine = _new_machine()
+        self.machine = RISCV64(self.binary_path, dtb=True)
+        self.machine.set_verbosity(0)
+
 
 
 _sessions: dict[str, Session] = {}
 _lock = threading.Lock()
 
 
+def _pop(sid: str) -> Session | None:
+    s = _sessions.pop(sid, None)
+    if s is not None:
+        binaries.delete_upload(s.binary_id)
+    return s
+
+
 def _purge_expired(now: float) -> None:
     expired = [sid for sid, s in _sessions.items() if s.is_expired(now)]
     for sid in expired:
-        _sessions.pop(sid, None)
+        _pop(sid)
         log.info("session expired and purged sid=%s", sid)
     if expired:
         log.debug("purge complete count=%d remaining=%d", len(expired), len(_sessions))
 
 
-def create() -> str:
+def create(binary_id: str) -> str:
     sid = uuid.uuid4().hex
     with _lock:
         _purge_expired(time.monotonic())
-        _sessions[sid] = Session()
+        _sessions[sid] = Session(binary_id)
         active = len(_sessions)
-    log.info("session created sid=%s active=%d", sid, active)
+    log.info("session created sid=%s binary_id=%s active=%d", sid, binary_id, active)
     return sid
 
 
 def delete(sid: str) -> bool:
     with _lock:
-        existed = _sessions.pop(sid, None) is not None
+        existed = _pop(sid) is not None
         active = len(_sessions)
     if existed:
         log.info("session deleted sid=%s active=%d", sid, active)
@@ -85,8 +91,8 @@ def get(x_session_id: str = Header(..., description="Session ID from POST /sessi
             raise HTTPException(status_code=404, detail="Session not found or expired")
         if s.is_expired(now):
             log.info("session get expired sid=%s idle=%.1fs", x_session_id, now - s.last_access)
-            _sessions.pop(x_session_id, None)
+            _pop(x_session_id)
             raise HTTPException(status_code=404, detail="Session not found or expired")
-        s.last_access = now
+        s.touch()
     log.debug("session hit sid=%s", x_session_id)
     return s

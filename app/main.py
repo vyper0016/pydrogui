@@ -2,11 +2,12 @@ import logging
 from typing import List
 
 import fastapi
-from fastapi import HTTPException, Query, Depends
+from fastapi import HTTPException, Query, Depends, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 import sessions
+import binaries
 from sessions import Session, SESSION_TTL_SECONDS
 
 logging.basicConfig(
@@ -21,10 +22,20 @@ app = fastapi.FastAPI(
 app.mount('/static', StaticFiles(directory='/app/static'), name='static')
 
 
+@app.get('/binaries/examples', tags=["Binaries"])
+def list_binary_examples() -> List[dict]:
+    return binaries.list_examples()
+
+
+@app.post('/binaries', tags=["Binaries"])
+async def upload_binary(file: UploadFile = File(...)) -> dict:
+    return await binaries.save_upload(file)
+
+
 @app.post('/sessions', tags=["Sessions"])
-def create_session() -> dict:
+def create_session(binary_id: str) -> dict:
     """Create new simulator session. Returns session_id to pass as X-Session-Id header."""
-    sid = sessions.create()
+    sid = sessions.create(binary_id)
     return {"session_id": sid, "ttl_seconds": SESSION_TTL_SECONDS}
 
 

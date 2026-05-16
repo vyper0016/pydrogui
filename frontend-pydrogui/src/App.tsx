@@ -2,11 +2,28 @@ import { useState, useEffect, useRef } from 'react'
 
 const API = '/api'
 const SESSION_KEY = 'pydrogui.session_id'
+const BINARY_NAME_KEY = 'pydrogui.binary_name'
 
 let sessionId: string | null = localStorage.getItem(SESSION_KEY)
 
-async function createSession(): Promise<string> {
-  const res = await fetch(API + '/sessions', { method: 'POST' })
+type BinaryItem = { id: string; name: string; size: number }
+
+async function listExamples(): Promise<BinaryItem[]> {
+  const res = await fetch(API + '/binaries/examples')
+  if (!res.ok) throw new Error(`List examples failed: ${await res.text()}`)
+  return res.json()
+}
+
+async function uploadBinary(file: File): Promise<BinaryItem> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(API + '/binaries', { method: 'POST', body: form })
+  if (!res.ok) throw new Error(`Upload failed: ${await res.text()}`)
+  return res.json()
+}
+
+async function createSession(binaryId: string): Promise<string> {
+  const res = await fetch(`${API}/sessions?binary_id=${encodeURIComponent(binaryId)}`, { method: 'POST' })
   if (!res.ok) throw new Error(`Create session failed: ${await res.text()}`)
   const data = await res.json() as { session_id: string }
   sessionId = data.session_id
@@ -22,18 +39,17 @@ async function deleteSession(sid: string): Promise<void> {
   }
 }
 
-async function ensureSession(): Promise<string> {
-  if (sessionId) return sessionId
-  return await createSession()
+class NoSessionError extends Error {
+  constructor() { super('No active session. Pick a binary to start.') }
 }
 
 async function rawFetch(path: string, method: string): Promise<Response> {
-  const sid = await ensureSession()
-  return fetch(API + path, { method, headers: { 'X-Session-Id': sid } })
+  if (!sessionId) throw new NoSessionError()
+  return fetch(API + path, { method, headers: { 'X-Session-Id': sessionId } })
 }
 
 class SessionExpiredError extends Error {
-  constructor() { super('Session expired. Click "New session" to start a new one.') }
+  constructor() { super('Session expired. Pick a binary to start a new one.') }
 }
 
 async function checkSession(res: Response): Promise<Response> {
@@ -42,6 +58,7 @@ async function checkSession(res: Response): Promise<Response> {
     if (body.includes('Session not found') || body.includes('expired')) {
       sessionId = null
       localStorage.removeItem(SESSION_KEY)
+      localStorage.removeItem(BINARY_NAME_KEY)
       throw new SessionExpiredError()
     }
   }
@@ -134,6 +151,13 @@ export default function App() {
   const [instruction, setInstruction] = useState('')
   const [error, setError] = useState('')
   const [runSteps, setRunSteps] = useState(100)
+  const [examples, setExamples] = useState<BinaryItem[]>([])
+  const [pickedId, setPickedId] = useState<string>('')
+  const [uploading, setUploading] = useState(false)
+  const [hasSession, setHasSession] = useState<boolean>(sessionId !== null)
+  const [loadedName, setLoadedName] = useState<string>(localStorage.getItem(BINARY_NAME_KEY) ?? '')
+  const [loadStatus, setLoadStatus] = useState<string>('')
+  const [pickerOpen, setPickerOpen] = useState<boolean>(sessionId === null)
   const inited = useRef(false)
 
   async function updateDisplay() {
@@ -177,23 +201,63 @@ export default function App() {
     }
   }
 
-  async function newSession() {
+  async function endSession() {
+    const old = sessionId
+    sessionId = null
+    localStorage.removeItem(SESSION_KEY)
+    localStorage.removeItem(BINARY_NAME_KEY)
+    setHasSession(false)
+    setLoadedName('')
+    setLoadStatus('')
+    setPickerOpen(true)
+    setRegs({})
+    setInstruction('')
+    if (old) await deleteSession(old)
+  }
+
+  async function startSession(binaryId: string, name: string) {
+    setError('')
+    setLoadStatus(`Loading ${name}…`)
     try {
-      const old = sessionId
-      sessionId = null
-      localStorage.removeItem(SESSION_KEY)
-      if (old) await deleteSession(old)
-      await createSession()
+      await endSession()
+      await createSession(binaryId)
+      setHasSession(true)
+      setLoadedName(name)
+      localStorage.setItem(BINARY_NAME_KEY, name)
+      setLoadStatus(`Loaded ${name}`)
+      setPickerOpen(false)
       await updateDisplay()
     } catch (err) {
+      setLoadStatus('')
       setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function onUpload(file: File) {
+    setError('')
+    setUploading(true)
+    setLoadStatus(`Uploading ${file.name}…`)
+    try {
+      const item = await uploadBinary(file)
+      await startSession(item.id, item.name)
+    } catch (err) {
+      setLoadStatus('')
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setUploading(false)
     }
   }
 
   useEffect(() => {
     if (inited.current) return
     inited.current = true
-    updateDisplay()
+    listExamples()
+      .then((items) => {
+        setExamples(items)
+        if (items.length > 0) setPickedId(items[0].id)
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+    if (sessionId) updateDisplay()
   }, [])
 
   return (
@@ -201,14 +265,95 @@ export default function App() {
       <div>
         <h1 className="text-2xl font-bold text-gray-800 mb-6">RISC-V Simulator</h1>
 
-        <div className="mb-4">
-          <button
-            onClick={newSession}
-            className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-100 cursor-pointer"
-          >
-            New session
-          </button>
-        </div>
+        {hasSession && !pickerOpen ? (
+          <div className="mb-4 flex items-center gap-2 text-xs text-gray-600">
+            <span>
+              Loaded <span className="font-mono text-gray-800">{loadedName}</span>
+            </span>
+            <button
+              onClick={() => setPickerOpen(true)}
+              className="px-2 py-0.5 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer"
+            >
+              Change
+            </button>
+            <button
+              onClick={endSession}
+              className="px-2 py-0.5 border border-gray-300 rounded hover:bg-gray-100 cursor-pointer"
+            >
+              End
+            </button>
+          </div>
+        ) : (
+          <div className="mb-4 p-3 border border-gray-200 rounded space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-gray-700">
+                {hasSession ? (
+                  <>Loaded: <span className="font-mono">{loadedName}</span></>
+                ) : 'Pick a binary to start:'}
+              </div>
+              {hasSession && (
+                <button
+                  onClick={() => setPickerOpen(false)}
+                  className="text-xs text-gray-500 hover:text-gray-700 cursor-pointer"
+                >
+                  ▴ hide
+                </button>
+              )}
+            </div>
+            {hasSession && (
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                Loading a new binary will end the current session.
+              </div>
+            )}
+            <div className="flex gap-2 items-center">
+              <select
+                value={pickedId}
+                onChange={(e) => setPickedId(e.target.value)}
+                className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+              >
+                {examples.length === 0 && <option value="">(no examples)</option>}
+                {examples.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => {
+                  const picked = examples.find((b) => b.id === pickedId)
+                  if (picked) startSession(picked.id, picked.name)
+                }}
+                disabled={!pickedId}
+                className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 cursor-pointer"
+              >
+                Load example
+              </button>
+            </div>
+            <div className="flex gap-2 items-center">
+              <input
+                type="file"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) onUpload(f)
+                  e.target.value = ''
+                }}
+                disabled={uploading}
+                className="flex-1 text-sm"
+              />
+            </div>
+            {loadStatus && (
+              <div className={`text-xs ${loadStatus.startsWith('Loaded') ? 'text-green-700' : 'text-gray-600'}`}>
+                {loadStatus}
+              </div>
+            )}
+            {hasSession && (
+              <button
+                onClick={endSession}
+                className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-100 cursor-pointer"
+              >
+                End session
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="mb-8 space-y-4">
           <div className="flex flex-col gap-1">
