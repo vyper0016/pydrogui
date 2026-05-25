@@ -9,3 +9,12 @@
   animation: reg-flash 1.8s ease-out forwards;
   border-radius: 2px;
 }
+
+@keyframes disasm-flash {
+  0% { background-color: rgb(253 224 71 / 0.85); }
+  100% { background-color: rgb(253 224 71 / 0); }
+}
+
+.disasm-flash {
+  animation: disasm-flash 1.8s ease-out;
+}

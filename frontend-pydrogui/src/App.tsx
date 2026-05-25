@@ -63,6 +63,18 @@ function cacheDisasm(binaryId: string, data: DisasmItem[]): void {
   }
 }
 
+function pruneDisasmCache(keepId: string | null): void {
+  const keepKey = keepId ? DISASM_KEY_PREFIX + keepId : null
+  const toRemove: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i)
+    if (k && k.startsWith(DISASM_KEY_PREFIX) && k !== keepKey) {
+      toRemove.push(k)
+    }
+  }
+  for (const k of toRemove) localStorage.removeItem(k)
+}
+
 async function createSession(binaryId: string): Promise<string> {
   const res = await fetch(`${API}/sessions?binary_id=${encodeURIComponent(binaryId)}`, { method: 'POST' })
   if (!res.ok) throw new Error(`Create session failed: ${await res.text()}`)
@@ -213,17 +225,67 @@ function Section({
   )
 }
 
-function DisasmView({ items, pc }: { items: DisasmItem[]; pc: string | null }) {
+type ScrollRequest = { pc: string; seq: number }
+
+function DisasmView({
+  items,
+  pc,
+  scrollRequest,
+}: {
+  items: DisasmItem[]
+  pc: string | null
+  scrollRequest: ScrollRequest | null
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const activeRef = useRef<HTMLDivElement>(null)
+  const [activeVisible, setActiveVisible] = useState(true)
+  const [activeDir, setActiveDir] = useState<'up' | 'down'>('down')
+
+  function centerInView(el: HTMLElement) {
+    const c = containerRef.current
+    if (!c) return
+    const offset = el.offsetTop - c.offsetTop - c.clientHeight / 2 + el.clientHeight / 2
+    c.scrollTo({ top: offset, behavior: 'smooth' })
+  }
+
+  function scrollToCurrent() {
+    if (activeRef.current) centerInView(activeRef.current)
+  }
+
+  useEffect(() => {
+    if (activeRef.current) centerInView(activeRef.current)
+  }, [pc, items])
 
   useEffect(() => {
     if (!activeRef.current || !containerRef.current) return
-    const c = containerRef.current
-    const el = activeRef.current
-    const offset = el.offsetTop - c.offsetTop - c.clientHeight / 2 + el.clientHeight / 2
-    c.scrollTo({ top: offset, behavior: 'smooth' })
+    const root = containerRef.current
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setActiveVisible(entry.isIntersecting)
+        if (!entry.isIntersecting) {
+          const rootRect = root.getBoundingClientRect()
+          setActiveDir(entry.boundingClientRect.top < rootRect.top ? 'up' : 'down')
+        }
+      },
+      { root, threshold: 0.1 },
+    )
+    observer.observe(activeRef.current)
+    return () => observer.disconnect()
   }, [pc, items])
+
+  useEffect(() => {
+    if (!scrollRequest || !containerRef.current) return
+    const el = containerRef.current.querySelector(
+      `[data-pc="${scrollRequest.pc}"]`,
+    ) as HTMLElement | null
+    if (!el) return
+    centerInView(el)
+    el.classList.remove('disasm-flash')
+    void el.offsetWidth
+    el.classList.add('disasm-flash')
+    const t = window.setTimeout(() => el.classList.remove('disasm-flash'), 1900)
+    return () => window.clearTimeout(t)
+  }, [scrollRequest])
 
   if (items.length === 0) {
     return (
@@ -234,55 +296,67 @@ function DisasmView({ items, pc }: { items: DisasmItem[]; pc: string | null }) {
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="border border-gray-200 rounded bg-white font-mono text-xs overflow-auto h-[60vh]"
-    >
-      <div className="sticky top-0 z-10 grid grid-cols-[10ch_10ch_8ch_1fr] gap-3 px-3 py-1.5 bg-gray-100 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wide text-xs">
-        <span>address</span>
-        <span>bytes</span>
-        <span>mnemonic</span>
-        <span>operands</span>
+    <div className="relative">
+      <div
+        ref={containerRef}
+        className="border border-gray-200 rounded bg-white font-mono text-xs overflow-auto h-[60vh]"
+      >
+        <div className="sticky top-0 z-10 grid grid-cols-[10ch_10ch_8ch_1fr] gap-3 px-3 py-1.5 bg-gray-100 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wide text-xs">
+          <span>address</span>
+          <span>bytes</span>
+          <span>mnemonic</span>
+          <span>operands</span>
+        </div>
+        {items.map((it, i) => {
+          if (it.type === 'section') {
+            return (
+              <div key={i} className="px-3 py-1 mt-2 text-gray-500 uppercase tracking-wide">
+                section {it.name}
+              </div>
+            )
+          }
+          if (it.type === 'label') {
+            return (
+              <div key={i} className="px-3 py-1 mt-1 text-purple-700 font-semibold">
+                {it.name}:
+              </div>
+            )
+          }
+          const isActive = pc !== null && it.pc === pc
+          return (
+            <div
+              key={i}
+              data-pc={it.pc}
+              ref={isActive ? activeRef : undefined}
+              className={
+                'grid grid-cols-[10ch_10ch_8ch_1fr] gap-3 px-3 py-0.5 ' +
+                (isActive
+                  ? 'bg-yellow-200 text-gray-900'
+                  : 'text-gray-800 hover:bg-gray-50')
+              }
+            >
+              <span className="text-gray-500">{it.pc}</span>
+              <span className="text-gray-400">{it.bytes}</span>
+              <span className="text-blue-700">{it.instruction}</span>
+              <span className="break-all">
+                {it.operands?.join(', ') ?? ''}
+                {it.comment && (
+                  <span className="text-gray-500 italic ml-2"># {it.comment}</span>
+                )}
+              </span>
+            </div>
+          )
+        })}
       </div>
-      {items.map((it, i) => {
-        if (it.type === 'section') {
-          return (
-            <div key={i} className="px-3 py-1 mt-2 text-gray-500 uppercase tracking-wide">
-              section {it.name}
-            </div>
-          )
-        }
-        if (it.type === 'label') {
-          return (
-            <div key={i} className="px-3 py-1 mt-1 text-purple-700 font-semibold">
-              {it.name}:
-            </div>
-          )
-        }
-        const isActive = pc !== null && it.pc === pc
-        return (
-          <div
-            key={i}
-            ref={isActive ? activeRef : undefined}
-            className={
-              'grid grid-cols-[10ch_10ch_8ch_1fr] gap-3 px-3 py-0.5 ' +
-              (isActive
-                ? 'bg-yellow-200 text-gray-900'
-                : 'text-gray-800 hover:bg-gray-50')
-            }
-          >
-            <span className="text-gray-500">{it.pc}</span>
-            <span className="text-gray-400">{it.bytes}</span>
-            <span className="text-blue-700">{it.instruction}</span>
-            <span className="break-all">
-              {it.operands?.join(', ') ?? ''}
-              {it.comment && (
-                <span className="text-gray-500 italic ml-2"># {it.comment}</span>
-              )}
-            </span>
-          </div>
-        )
-      })}
+      {pc !== null && !activeVisible && (
+        <button
+          onClick={scrollToCurrent}
+          title="scroll back to current instruction"
+          className="absolute bottom-3 right-4 w-9 h-9 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center text-lg cursor-pointer"
+        >
+          {activeDir === 'up' ? '↑' : '↓'}
+        </button>
+      )}
     </div>
   )
 }
@@ -291,6 +365,8 @@ export default function App() {
   const [regs, setRegs] = useState<RegMap>({})
   const [flashSeq, setFlashSeq] = useState<Record<string, number>>({})
   const prevRegsRef = useRef<RegMap>({})
+  const lastInstructionPcRef = useRef<string | null>(null)
+  const [scrollRequest, setScrollRequest] = useState<ScrollRequest | null>(null)
   const [lastInstr, setLastInstr] = useState('')
   const [error, setError] = useState('')
   const [runSteps, setRunSteps] = useState(100)
@@ -308,6 +384,7 @@ export default function App() {
   const pcNormalized = normalizePc(regs.pc)
 
   async function loadDisasm(binaryId: string): Promise<void> {
+    pruneDisasmCache(binaryId)
     const cached = loadCachedDisasm(binaryId)
     if (cached) {
       setDisasm(cached)
@@ -337,6 +414,7 @@ export default function App() {
         apiFetchJson<string>('/disassemble-last-instruction'),
       ])
       const prev = prevRegsRef.current
+      lastInstructionPcRef.current = normalizePc(prev.pc)
       setFlashSeq((cur) => {
         const next = { ...cur }
         for (const k of Object.keys(regMap)) {
@@ -388,6 +466,7 @@ export default function App() {
     localStorage.removeItem(SESSION_KEY)
     localStorage.removeItem(BINARY_NAME_KEY)
     localStorage.removeItem(BINARY_ID_KEY)
+    pruneDisasmCache(null)
     setHasSession(false)
     setLoadedName('')
     setLoadStatus('')
@@ -395,6 +474,8 @@ export default function App() {
     setRegs({})
     setFlashSeq({})
     prevRegsRef.current = {}
+    lastInstructionPcRef.current = null
+    setScrollRequest(null)
     setLastInstr('')
     setDisasm([])
     if (old) await deleteSession(old)
@@ -447,6 +528,9 @@ export default function App() {
       updateDisplay()
       const bid = localStorage.getItem(BINARY_ID_KEY)
       if (bid) loadDisasm(bid)
+      else pruneDisasmCache(null)
+    } else {
+      pruneDisasmCache(null)
     }
   }, [])
 
@@ -582,9 +666,19 @@ export default function App() {
               {lastInstr && (
                 <span className="flex items-center gap-1">
                   <span className="text-gray-600">last instruction:</span>
-                  <span className="text-gray-900 px-2 py-0.5 bg-gray-100 rounded border border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = lastInstructionPcRef.current
+                      if (!target) return
+                      setScrollRequest((cur) => ({ pc: target, seq: (cur?.seq ?? 0) + 1 }))
+                    }}
+                    disabled={!lastInstructionPcRef.current}
+                    title="scroll to last instruction"
+                    className="text-gray-900 px-2 py-0.5 bg-gray-100 rounded border border-gray-200 hover:bg-gray-200 disabled:opacity-60 cursor-pointer font-mono"
+                  >
                     {lastInstr}
-                  </span>
+                  </button>
                 </span>
               )}
             </span>
@@ -596,7 +690,7 @@ export default function App() {
             Loading disassembly…
           </div>
         ) : (
-          <DisasmView items={disasm} pc={pcNormalized} />
+          <DisasmView items={disasm} pc={pcNormalized} scrollRequest={scrollRequest} />
         )}
 
         {error && (

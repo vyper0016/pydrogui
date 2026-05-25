@@ -140,11 +140,18 @@ def parse_disassembly(dis_raw: str) -> list[dict]:
         }
         
         if len(parts) > 3:
-            parsed_line['operands'] = parts[3].split(',')
+            operands = parts[3].split(',')
+            for i in range(len(operands)):
+                try:
+                    operands[i] = hex(int(operands[i], 16))
+                except ValueError:
+                    pass
+            parsed_line['operands'] = operands
             if '#' in line:
                 parsed_line['comment'] = line[line.index('#')+1:].strip()
         out.append(parsed_line)
     return out
+
 
 def disassemble(binary_id: str) -> list[dict]:
     path = resolve(binary_id)
