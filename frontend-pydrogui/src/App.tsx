@@ -236,10 +236,26 @@ function DisasmView({
   pc: string | null
   scrollRequest: ScrollRequest | null
 }) {
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const activeRef = useRef<HTMLDivElement>(null)
   const [activeVisible, setActiveVisible] = useState(true)
   const [activeDir, setActiveDir] = useState<'up' | 'down'>('down')
+
+  useEffect(() => {
+    const w = wrapperRef.current
+    if (!w) return
+    const saved = localStorage.getItem('pydrogui.disasm_height_px')
+    if (saved) w.style.height = `${parseInt(saved, 10)}px`
+    const ro = new ResizeObserver(([entry]) => {
+      localStorage.setItem(
+        'pydrogui.disasm_height_px',
+        String(Math.round(entry.contentRect.height)),
+      )
+    })
+    ro.observe(w)
+    return () => ro.disconnect()
+  }, [])
 
   function centerInView(el: HTMLElement) {
     const c = containerRef.current
@@ -296,10 +312,13 @@ function DisasmView({
   }
 
   return (
-    <div className="relative">
+    <div
+      ref={wrapperRef}
+      className="relative resize-y overflow-hidden border border-gray-200 rounded bg-white h-[60vh] min-h-[160px] max-h-[90vh]"
+    >
       <div
         ref={containerRef}
-        className="border border-gray-200 rounded bg-white font-mono text-xs overflow-auto h-[60vh]"
+        className="font-mono text-xs overflow-auto h-full"
       >
         <div className="sticky top-0 z-10 grid grid-cols-[10ch_10ch_8ch_1fr] gap-3 px-3 py-1.5 bg-gray-100 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wide text-xs">
           <span>address</span>
