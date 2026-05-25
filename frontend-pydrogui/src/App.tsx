@@ -3,10 +3,24 @@ import { useState, useEffect, useRef } from 'react'
 const API = '/api'
 const SESSION_KEY = 'pydrogui.session_id'
 const BINARY_NAME_KEY = 'pydrogui.binary_name'
+const BINARY_ID_KEY = 'pydrogui.binary_id'
+const DISASM_KEY_PREFIX = 'pydrogui.disasm.'
 
 let sessionId: string | null = localStorage.getItem(SESSION_KEY)
 
 type BinaryItem = { id: string; name: string; size: number }
+
+type DisasmItem =
+  | { type: 'section'; name: string }
+  | { type: 'label'; pc: string; name: string }
+  | {
+      type: 'instruction'
+      pc: string
+      bytes: string
+      instruction: string
+      operands?: string[]
+      comment?: string
+    }
 
 async function listExamples(): Promise<BinaryItem[]> {
   const res = await fetch(API + '/binaries/examples')
@@ -20,6 +34,33 @@ async function uploadBinary(file: File): Promise<BinaryItem> {
   const res = await fetch(API + '/binaries', { method: 'POST', body: form })
   if (!res.ok) throw new Error(`Upload failed: ${await res.text()}`)
   return res.json()
+}
+
+async function fetchDisassembly(binaryId: string): Promise<DisasmItem[]> {
+  const res = await fetch(
+    `${API}/disassemble?binary_id=${encodeURIComponent(binaryId)}`,
+    { method: 'POST' },
+  )
+  if (!res.ok) throw new Error(`Disassemble failed: ${await res.text()}`)
+  return res.json()
+}
+
+function loadCachedDisasm(binaryId: string): DisasmItem[] | null {
+  const raw = localStorage.getItem(DISASM_KEY_PREFIX + binaryId)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as DisasmItem[]
+  } catch {
+    return null
+  }
+}
+
+function cacheDisasm(binaryId: string, data: DisasmItem[]): void {
+  try {
+    localStorage.setItem(DISASM_KEY_PREFIX + binaryId, JSON.stringify(data))
+  } catch {
+    // quota exceeded — skip persistence, keep in memory
+  }
 }
 
 async function createSession(binaryId: string): Promise<string> {
@@ -59,6 +100,7 @@ async function checkSession(res: Response): Promise<Response> {
       sessionId = null
       localStorage.removeItem(SESSION_KEY)
       localStorage.removeItem(BINARY_NAME_KEY)
+      localStorage.removeItem(BINARY_ID_KEY)
       throw new SessionExpiredError()
     }
   }
@@ -107,6 +149,15 @@ function buildBatchUrl(regs: string[]): string {
   return `/read-registers-batch?${params}`
 }
 
+function normalizePc(pc: string | undefined): string | null {
+  if (!pc) return null
+  const m = pc.trim().match(/^(-?)0x([0-9a-fA-F]+)$/) ?? pc.trim().match(/^(-?)([0-9a-fA-F]+)$/)
+  if (!m) return null
+  const sign = m[1]
+  const hex = m[2].replace(/^0+/, '') || '0'
+  return `${sign}0x${hex.toLowerCase()}`
+}
+
 type RegMap = Record<string, string>
 
 function RegList({ regs, values }: { regs: string[]; values: RegMap }) {
@@ -146,9 +197,83 @@ function Section({
   )
 }
 
+function DisasmView({ items, pc }: { items: DisasmItem[]; pc: string | null }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const activeRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!activeRef.current || !containerRef.current) return
+    const c = containerRef.current
+    const el = activeRef.current
+    const offset = el.offsetTop - c.offsetTop - c.clientHeight / 2 + el.clientHeight / 2
+    c.scrollTo({ top: offset, behavior: 'smooth' })
+  }, [pc, items])
+
+  if (items.length === 0) {
+    return (
+      <div className="text-xs text-gray-500 italic p-3 border border-gray-200 rounded">
+        No disassembly loaded.
+      </div>
+    )
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="border border-gray-200 rounded bg-white font-mono text-xs overflow-auto h-[60vh]"
+    >
+      <div className="sticky top-0 z-10 grid grid-cols-[10ch_10ch_8ch_1fr] gap-3 px-3 py-1.5 bg-gray-100 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wide text-xs">
+        <span>address</span>
+        <span>bytes</span>
+        <span>mnemonic</span>
+        <span>operands</span>
+      </div>
+      {items.map((it, i) => {
+        if (it.type === 'section') {
+          return (
+            <div key={i} className="px-3 py-1 mt-2 text-gray-500 uppercase tracking-wide">
+              section {it.name}
+            </div>
+          )
+        }
+        if (it.type === 'label') {
+          return (
+            <div key={i} className="px-3 py-1 mt-1 text-purple-700 font-semibold">
+              {it.name}:
+            </div>
+          )
+        }
+        const isActive = pc !== null && it.pc === pc
+        return (
+          <div
+            key={i}
+            ref={isActive ? activeRef : undefined}
+            className={
+              'grid grid-cols-[10ch_10ch_8ch_1fr] gap-3 px-3 py-0.5 ' +
+              (isActive
+                ? 'bg-yellow-200 text-gray-900'
+                : 'text-gray-800 hover:bg-gray-50')
+            }
+          >
+            <span className="text-gray-500">{it.pc}</span>
+            <span className="text-gray-400">{it.bytes}</span>
+            <span className="text-blue-700">{it.instruction}</span>
+            <span className="break-all">
+              {it.operands?.join(', ') ?? ''}
+              {it.comment && (
+                <span className="text-gray-500 italic ml-2"># {it.comment}</span>
+              )}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function App() {
   const [regs, setRegs] = useState<RegMap>({})
-  const [instruction, setInstruction] = useState('')
+  const [lastInstr, setLastInstr] = useState('')
   const [error, setError] = useState('')
   const [runSteps, setRunSteps] = useState(100)
   const [examples, setExamples] = useState<BinaryItem[]>([])
@@ -158,16 +283,43 @@ export default function App() {
   const [loadedName, setLoadedName] = useState<string>(localStorage.getItem(BINARY_NAME_KEY) ?? '')
   const [loadStatus, setLoadStatus] = useState<string>('')
   const [pickerOpen, setPickerOpen] = useState<boolean>(sessionId === null)
+  const [disasm, setDisasm] = useState<DisasmItem[]>([])
+  const [disasmLoading, setDisasmLoading] = useState(false)
   const inited = useRef(false)
+
+  const pcNormalized = normalizePc(regs.pc)
+
+  async function loadDisasm(binaryId: string): Promise<void> {
+    const cached = loadCachedDisasm(binaryId)
+    if (cached) {
+      setDisasm(cached)
+      return
+    }
+    setDisasmLoading(true)
+    try {
+      const data = await fetchDisassembly(binaryId)
+      const normalized: DisasmItem[] = data.map((d) => {
+        if (d.type === 'instruction') return { ...d, pc: normalizePc(d.pc) ?? d.pc }
+        if (d.type === 'label') return { ...d, pc: normalizePc(d.pc) ?? d.pc }
+        return d
+      })
+      setDisasm(normalized)
+      cacheDisasm(binaryId, normalized)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDisasmLoading(false)
+    }
+  }
 
   async function updateDisplay() {
     try {
       const [regMap, instVal] = await Promise.all([
         apiFetchJson<RegMap>(buildBatchUrl(ALL_REGS)),
-        apiFetch('/disassemble-last-instruction'),
+        apiFetchJson<string>('/disassemble-last-instruction'),
       ])
       setRegs(regMap)
-      setInstruction(instVal)
+      setLastInstr(instVal)
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -206,12 +358,14 @@ export default function App() {
     sessionId = null
     localStorage.removeItem(SESSION_KEY)
     localStorage.removeItem(BINARY_NAME_KEY)
+    localStorage.removeItem(BINARY_ID_KEY)
     setHasSession(false)
     setLoadedName('')
     setLoadStatus('')
     setPickerOpen(true)
     setRegs({})
-    setInstruction('')
+    setLastInstr('')
+    setDisasm([])
     if (old) await deleteSession(old)
   }
 
@@ -224,9 +378,10 @@ export default function App() {
       setHasSession(true)
       setLoadedName(name)
       localStorage.setItem(BINARY_NAME_KEY, name)
+      localStorage.setItem(BINARY_ID_KEY, binaryId)
       setLoadStatus(`Loaded ${name}`)
       setPickerOpen(false)
-      await updateDisplay()
+      await Promise.all([updateDisplay(), loadDisasm(binaryId)])
     } catch (err) {
       setLoadStatus('')
       setError(err instanceof Error ? err.message : String(err))
@@ -257,7 +412,11 @@ export default function App() {
         if (items.length > 0) setPickedId(items[0].id)
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
-    if (sessionId) updateDisplay()
+    if (sessionId) {
+      updateDisplay()
+      const bid = localStorage.getItem(BINARY_ID_KEY)
+      if (bid) loadDisasm(bid)
+    }
   }, [])
 
   return (
@@ -355,56 +514,59 @@ export default function App() {
           </div>
         )}
 
-        <div className="mb-8 space-y-4">
-          <div className="flex flex-col gap-1">
-            <button
-              onClick={step}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded cursor-pointer text-base"
-            >
-              Step
-            </button>
-            <span className="text-sm text-gray-500">Execute one instruction</span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min={1}
-                value={runSteps}
-                onChange={(e) => setRunSteps(Number(e.target.value))}
-                className="w-24 px-3 py-3 border border-gray-300 rounded text-base"
-              />
-              <button
-                onClick={run}
-                className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded cursor-pointer text-base"
-              >
-                Run
-              </button>
-            </div>
-            <span className="text-sm text-gray-500">Execute N instructions</span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <button
-              onClick={reset}
-              className="px-6 py-3 bg-gray-500 hover:bg-gray-600 active:bg-gray-700 text-white font-bold rounded cursor-pointer text-base"
-            >
-              Reset
-            </button>
-            <span className="text-sm text-gray-500">Reset the simulator</span>
-          </div>
+        <div className="mb-4 flex flex-wrap gap-2 items-center">
+          <button
+            onClick={step}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold rounded cursor-pointer text-sm"
+          >
+            Step
+          </button>
+          <input
+            type="number"
+            min={1}
+            value={runSteps}
+            onChange={(e) => setRunSteps(Number(e.target.value))}
+            className="w-20 px-2 py-2 border border-gray-300 rounded text-sm"
+          />
+          <button
+            onClick={run}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold rounded cursor-pointer text-sm"
+          >
+            Run N
+          </button>
+          <button
+            onClick={reset}
+            className="px-4 py-2 bg-gray-500 hover:bg-gray-600 active:bg-gray-700 text-white font-semibold rounded cursor-pointer text-sm"
+          >
+            Reset
+          </button>
+          {pcNormalized && (
+            <span className="ml-auto text-xs font-mono flex flex-col items-end gap-1">
+              <span className="flex items-center gap-1">
+                <span className="text-gray-600">pc:</span>
+                <span className="text-gray-900 px-2 py-0.5 bg-gray-100 rounded border border-gray-200">
+                  {pcNormalized}
+                </span>
+              </span>
+              {lastInstr && (
+                <span className="flex items-center gap-1">
+                  <span className="text-gray-600">last instruction:</span>
+                  <span className="text-gray-900 px-2 py-0.5 bg-gray-100 rounded border border-gray-200">
+                    {lastInstr}
+                  </span>
+                </span>
+              )}
+            </span>
+          )}
         </div>
 
-        <div className="space-y-4">
-          <div className="flex flex-col gap-1">
-            <label className="font-bold text-gray-700">Last Instruction (Disassembled)</label>
-            <input
-              type="text"
-              readOnly
-              value={instruction}
-              className="px-3 py-2 font-mono text-sm border border-gray-300 rounded bg-gray-50"
-            />
+        {disasmLoading ? (
+          <div className="text-xs text-gray-500 italic p-3 border border-gray-200 rounded">
+            Loading disassembly…
           </div>
-        </div>
+        ) : (
+          <DisasmView items={disasm} pc={pcNormalized} />
+        )}
 
         {error && (
           <p className="mt-4 text-sm text-red-600">Error: {error}</p>
