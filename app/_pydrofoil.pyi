@@ -1,0 +1,6 @@
+class bitvector:
+    def signed(self) -> int:
+        ...
+    
+class RISCV64:
+    ...

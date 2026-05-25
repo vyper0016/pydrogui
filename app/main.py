@@ -5,7 +5,7 @@ import fastapi
 from fastapi import HTTPException, Query, Depends, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-
+from _pydrofoil import bitvector
 import sessions
 import binaries
 from sessions import Session, SESSION_TTL_SECONDS
@@ -66,7 +66,7 @@ def disassemble_last_instruction(session: Session = Depends(sessions.get)) -> st
 def read_register(reg_name: str, session: Session = Depends(sessions.get)) -> str:
     try:
         value = session.machine.read_register(reg_name)
-        value = hex(value.signed()) if 'signed' in dir(value) else value
+        value = hex(value.signed()) if isinstance(value, bitvector) else value
         return str(value)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=f"{reg_name}: {e}")
