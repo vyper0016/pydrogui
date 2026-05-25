@@ -23,6 +23,18 @@ app = fastapi.FastAPI(
 
 api = APIRouter(prefix='/api')
 
+ALL_REG_NAMES: list[str] = [
+    'pc', 'nextpc', 'instbits', 'cur_privilege',
+    *[f'x{i}' for i in range(1, 32)],
+    'mstatus', 'misa',
+    'mtvec', 'mcause', 'mepc', 'mtval',
+    'stvec', 'scause', 'sepc', 'stval',
+    'satp', 'mip', 'mie',
+    *[f'f{i}' for i in range(32)], 'fcsr',
+    *[f'vr{i}' for i in range(32)], 'vtype', 'vl', 'vstart', 'vlenb',
+    'mcycle', 'minstret', 'mtime', 'mtimecmp',
+]
+
 
 @api.get('/binaries/examples', tags=["Binaries"])
 def list_binary_examples() -> List[dict]:
@@ -94,9 +106,11 @@ def read_register(reg_name: str, session: Session = Depends(sessions.get)) -> st
 
 @api.get('/read-registers-batch', tags=["Registers"])
 def read_registers_batch(
-    reg_names: List[str] = Query(...),
+    reg_names: List[str] = Query(..., description="Register names, or 'all' to fetch a standard set of registers"),
     session: Session = Depends(sessions.get),
 ) -> dict:
+    if reg_names == ['all']:
+        reg_names = ALL_REG_NAMES
     return {reg: read_register(reg, session) for reg in reg_names}
 
 

@@ -153,14 +153,7 @@ const VECTOR_REGS = [...range('vr', 0, 31), 'vtype', 'vl', 'vstart', 'vlenb']
 
 const COUNTER_REGS = ['mcycle', 'minstret', 'mtime', 'mtimecmp']
 
-const ALL_REGS = [
-  ...CORE_REGS, ...CSR_REGS, ...FLOAT_REGS, ...VECTOR_REGS, ...COUNTER_REGS,
-]
-
-function buildBatchUrl(regs: string[]): string {
-  const params = regs.map((r) => `reg_names=${encodeURIComponent(r)}`).join('&')
-  return `/read-registers-batch?${params}`
-}
+const READ_ALL_REGS_URL = '/read-registers-batch?reg_names=all'
 
 function normalizePc(pc: string | undefined): string | null {
   if (!pc) return null
@@ -455,7 +448,7 @@ export default function App() {
   async function updateDisplay() {
     try {
       const [regMap, instVal] = await Promise.all([
-        apiFetchJson<RegMap>(buildBatchUrl(ALL_REGS)),
+        apiFetchJson<RegMap>(READ_ALL_REGS_URL),
         apiFetchJson<string>('/disassemble-last-instruction'),
       ])
       const prev = prevRegsRef.current
