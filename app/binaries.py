@@ -113,3 +113,40 @@ def delete_upload(binary_id: str) -> None:
         pass
     except OSError as e:
         log.warning("upload delete failed id=%s err=%s", binary_id, e)
+
+
+def parse_disassembly(dis_raw: str) -> list[dict]:
+    out = []
+    for line in dis_raw.splitlines():
+        line = line.strip().replace(':', '')
+        parts = line.split()
+        if len(parts) < 2  or 'file format' in line:
+            continue
+            
+        if 'section' in line:
+            out.append({"type": "section", "name": parts[-1]})
+            continue
+        
+        if len(parts) == 2:
+            #label like "00000000800026b8 <_init>"
+            out.append({"type": "label", 'pc': hex(int(parts[0], 16)), "name": parts[1]})
+            continue
+        
+        parsed_line = {
+            'type': "instruction",
+            "pc": hex(int(parts[0], 16)),
+            'bytes': hex(int(parts[1], 16)),
+            'instruction': parts[2]
+        }
+        
+        if len(parts) > 3:
+            parsed_line['operands'] = parts[3].split(',')
+            if '#' in line:
+                parsed_line['comment'] = line[line.index('#')+1:].strip()
+        out.append(parsed_line)
+    return out
+
+def disassemble(binary_id: str) -> list[dict]:
+    path = resolve(binary_id)
+    dis_raw = os.popen(f"riscv64-linux-gnu-objdump --disassemble {path}").read()
+    return parse_disassembly(dis_raw)

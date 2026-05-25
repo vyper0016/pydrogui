@@ -31,6 +31,10 @@ def list_binary_examples() -> List[dict]:
 async def upload_binary(file: UploadFile = File(...)) -> dict:
     return await binaries.save_upload(file)
 
+@app.post('/disassemble', tags=["Binaries"])
+async def disassemble_binary(binary_id: str) -> list[dict]:
+    return binaries.disassemble(binary_id)
+
 
 @app.post('/sessions', tags=["Sessions"])
 def create_session(binary_id: str) -> dict:
@@ -111,3 +115,5 @@ def run(steps: int, session: Session = Depends(sessions.get)) -> str:
 def reset(session: Session = Depends(sessions.get)) -> str:
     session.reset_machine()
     return 'Simulator reset successfully'
+
+
