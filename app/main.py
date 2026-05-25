@@ -82,8 +82,16 @@ def disassemble_last_instruction(session: Session = Depends(sessions.get)) -> st
 
 
 @api.post('/write-register/{reg_name}', tags=["Registers"])
-def write_register(reg_name: str, value: int, session: Session = Depends(sessions.get)) -> str:
+def write_register(reg_name: str, value_str: str, session: Session = Depends(sessions.get)) -> str:
     try:
+        if value_str.startswith('0x'):
+            value = int(value_str, 16)
+        else:
+            value = int(value_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid value: {value_str} for register {reg_name}")
+    
+    try:            
         session.machine.write_register(reg_name, value)
         return 'success'
     except ValueError as e:
