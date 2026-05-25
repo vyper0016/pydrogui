@@ -53,7 +53,7 @@ def delete_session(session_id: str) -> str:
     return 'deleted'
 
 
-@api.get('/test', tags=["UI"])
+@api.get('/test')
 def test_page() -> FileResponse:
     """Serve the legacy test HTML page."""
     return FileResponse('/app/static/test.html')
@@ -64,12 +64,23 @@ def hello() -> str:
     return 'Hello, world!'
 
 
-@api.get('/disassemble-last-instruction')
+@api.get('/disassemble-last-instruction', tags=["Execution Control"])
 def disassemble_last_instruction(session: Session = Depends(sessions.get)) -> str:
     return session.machine.disassemble_last_instruction()
 
 
-@api.get('/read-register/{reg_name}')
+@api.post('/write-register/{reg_name}', tags=["Registers"])
+def write_register(reg_name: str, value: int, session: Session = Depends(sessions.get)) -> str:
+    try:
+        session.machine.write_register(reg_name, value)
+        return 'success'
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=f"{reg_name}: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"{reg_name}: {e}")
+
+
+@api.get('/read-register/{reg_name}', tags=["Registers"])
 def read_register(reg_name: str, session: Session = Depends(sessions.get)) -> str:
     try:
         value = session.machine.read_register(reg_name)
@@ -81,7 +92,7 @@ def read_register(reg_name: str, session: Session = Depends(sessions.get)) -> st
         raise HTTPException(status_code=400, detail=f"{reg_name}: {e}")
 
 
-@api.get('/read-registers-batch')
+@api.get('/read-registers-batch', tags=["Registers"])
 def read_registers_batch(
     reg_names: List[str] = Query(...),
     session: Session = Depends(sessions.get),
@@ -89,7 +100,7 @@ def read_registers_batch(
     return {reg: read_register(reg, session) for reg in reg_names}
 
 
-@api.get('/read-memory/{address}/{bits}')
+@api.get('/read-memory/{address}/{bits}', tags=["Memory"])
 def read_memory(address: int, bits: int, session: Session = Depends(sessions.get)) -> int:
     try:
         return session.machine.read_memory(address, bits)
@@ -97,14 +108,14 @@ def read_memory(address: int, bits: int, session: Session = Depends(sessions.get
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@api.post('/step')
+@api.post('/step', tags=["Execution Control"])
 def step(session: Session = Depends(sessions.get)) -> str:
     """Execute a single instruction"""
     session.machine.step()
     return 'success'
 
 
-@api.post('/run')
+@api.post('/run', tags=["Execution Control"])
 def run(steps: int, session: Session = Depends(sessions.get)) -> str:
     """Execute a specified number of instructions"""
     try:
@@ -114,7 +125,7 @@ def run(steps: int, session: Session = Depends(sessions.get)) -> str:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@api.post('/reset')
+@api.post('/reset', tags=["Execution Control"])
 def reset(session: Session = Depends(sessions.get)) -> str:
     session.reset_machine()
     return 'Simulator reset successfully'
