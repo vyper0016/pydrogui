@@ -1,1 +1,11 @@
 @import "tailwindcss";
+
+@keyframes reg-flash {
+  0% { background-color: rgb(254 240 138 / 0.9); }
+  100% { background-color: rgb(254 240 138 / 0); }
+}
+
+.reg-flash {
+  animation: reg-flash 1.8s ease-out forwards;
+  border-radius: 2px;
+}

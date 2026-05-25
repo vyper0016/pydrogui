@@ -160,15 +160,31 @@ function normalizePc(pc: string | undefined): string | null {
 
 type RegMap = Record<string, string>
 
-function RegList({ regs, values }: { regs: string[]; values: RegMap }) {
+function RegList({
+  regs,
+  values,
+  flashSeq,
+}: {
+  regs: string[]
+  values: RegMap
+  flashSeq: Record<string, number>
+}) {
   return (
     <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 font-mono text-xs">
-      {regs.map((r) => (
-        <div key={r} className="contents">
-          <span className="text-gray-600">{r}</span>
-          <span className="text-gray-900 break-all">{values[r] ?? ''}</span>
-        </div>
-      ))}
+      {regs.map((r) => {
+        const seq = flashSeq[r] ?? 0
+        return (
+          <div key={r} className="contents">
+            <span className="text-gray-600">{r}</span>
+            <span
+              key={seq}
+              className={'text-gray-900 break-all px-1 -mx-1' + (seq > 0 ? ' reg-flash' : '')}
+            >
+              {values[r] ?? ''}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -273,6 +289,8 @@ function DisasmView({ items, pc }: { items: DisasmItem[]; pc: string | null }) {
 
 export default function App() {
   const [regs, setRegs] = useState<RegMap>({})
+  const [flashSeq, setFlashSeq] = useState<Record<string, number>>({})
+  const prevRegsRef = useRef<RegMap>({})
   const [lastInstr, setLastInstr] = useState('')
   const [error, setError] = useState('')
   const [runSteps, setRunSteps] = useState(100)
@@ -318,6 +336,17 @@ export default function App() {
         apiFetchJson<RegMap>(buildBatchUrl(ALL_REGS)),
         apiFetchJson<string>('/disassemble-last-instruction'),
       ])
+      const prev = prevRegsRef.current
+      setFlashSeq((cur) => {
+        const next = { ...cur }
+        for (const k of Object.keys(regMap)) {
+          if (prev[k] !== undefined && prev[k] !== regMap[k]) {
+            next[k] = (next[k] ?? 0) + 1
+          }
+        }
+        return next
+      })
+      prevRegsRef.current = regMap
       setRegs(regMap)
       setLastInstr(instVal)
       setError('')
@@ -364,6 +393,8 @@ export default function App() {
     setLoadStatus('')
     setPickerOpen(true)
     setRegs({})
+    setFlashSeq({})
+    prevRegsRef.current = {}
     setLastInstr('')
     setDisasm([])
     if (old) await deleteSession(old)
@@ -575,19 +606,19 @@ export default function App() {
 
       <aside className="space-y-3">
         <Section title="Core">
-          <RegList regs={CORE_REGS} values={regs} />
+          <RegList regs={CORE_REGS} values={regs} flashSeq={flashSeq} />
         </Section>
         <Section title="CSRs">
-          <RegList regs={CSR_REGS} values={regs} />
+          <RegList regs={CSR_REGS} values={regs} flashSeq={flashSeq} />
         </Section>
         <Section title="Float" defaultOpen={false}>
-          <RegList regs={FLOAT_REGS} values={regs} />
+          <RegList regs={FLOAT_REGS} values={regs} flashSeq={flashSeq} />
         </Section>
         <Section title="Vector" defaultOpen={false}>
-          <RegList regs={VECTOR_REGS} values={regs} />
+          <RegList regs={VECTOR_REGS} values={regs} flashSeq={flashSeq} />
         </Section>
         <Section title="Counters" defaultOpen={false}>
-          <RegList regs={COUNTER_REGS} values={regs} />
+          <RegList regs={COUNTER_REGS} values={regs} flashSeq={flashSeq} />
         </Section>
       </aside>
     </div>
