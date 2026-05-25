@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { displayName, describe, type NameMode } from './registers'
 
 const API = '/api'
 const SESSION_KEY = 'pydrogui.session_id'
@@ -176,18 +177,26 @@ function RegList({
   regs,
   values,
   flashSeq,
+  nameMode,
 }: {
   regs: string[]
   values: RegMap
   flashSeq: Record<string, number>
+  nameMode: NameMode
 }) {
   return (
     <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 font-mono text-xs">
       {regs.map((r) => {
         const seq = flashSeq[r] ?? 0
+        const desc = describe(r)
         return (
           <div key={r} className="contents">
-            <span className="text-gray-600">{r}</span>
+            <span
+              className="text-gray-600 cursor-help"
+              title={desc ?? r}
+            >
+              {displayName(r, nameMode)}
+            </span>
             <span
               key={seq}
               className={'text-gray-900 break-all px-1 -mx-1' + (seq > 0 ? ' reg-flash' : '')}
@@ -387,6 +396,13 @@ export default function App() {
   const [lastInstructionPc, setLastInstructionPc] = useState<string | null>(null)
   const [scrollRequest, setScrollRequest] = useState<ScrollRequest | null>(null)
   const [lastInstr, setLastInstr] = useState('')
+  const [nameMode, setNameMode] = useState<NameMode>(
+    () => (localStorage.getItem('pydrogui.name_mode') as NameMode | null) ?? 'reg',
+  )
+
+  useEffect(() => {
+    localStorage.setItem('pydrogui.name_mode', nameMode)
+  }, [nameMode])
   const [error, setError] = useState('')
   const [runSteps, setRunSteps] = useState(100)
   const [examples, setExamples] = useState<BinaryItem[]>([])
@@ -690,7 +706,7 @@ export default function App() {
           {pcNormalized && (
             <span className="ml-auto text-xs font-mono flex flex-col items-end gap-1">
               <span className="flex items-center gap-1">
-                <span className="text-gray-600">pc:</span>
+                <span className="text-gray-600 cursor-help" title="Program counter">pc:</span>
                 <span className="text-gray-900 px-2 py-0.5 bg-gray-100 rounded border border-gray-200">
                   {pcNormalized}
                 </span>
@@ -738,20 +754,45 @@ export default function App() {
       </div>
 
       <aside className="space-y-3">
+        <div className="flex items-center justify-end gap-1 text-xs">
+          <span className="text-gray-500 mr-1">names:</span>
+          <button
+            onClick={() => setNameMode('reg')}
+            className={
+              'px-2 py-0.5 rounded border cursor-pointer ' +
+              (nameMode === 'reg'
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100')
+            }
+          >
+            reg
+          </button>
+          <button
+            onClick={() => setNameMode('abi')}
+            className={
+              'px-2 py-0.5 rounded border cursor-pointer ' +
+              (nameMode === 'abi'
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100')
+            }
+          >
+            abi
+          </button>
+        </div>
         <Section title="Core">
-          <RegList regs={CORE_REGS} values={regs} flashSeq={flashSeq} />
+          <RegList regs={CORE_REGS} values={regs} flashSeq={flashSeq} nameMode={nameMode} />
         </Section>
         <Section title="CSRs">
-          <RegList regs={CSR_REGS} values={regs} flashSeq={flashSeq} />
+          <RegList regs={CSR_REGS} values={regs} flashSeq={flashSeq} nameMode={nameMode} />
         </Section>
         <Section title="Float" defaultOpen={false}>
-          <RegList regs={FLOAT_REGS} values={regs} flashSeq={flashSeq} />
+          <RegList regs={FLOAT_REGS} values={regs} flashSeq={flashSeq} nameMode={nameMode} />
         </Section>
         <Section title="Vector" defaultOpen={false}>
-          <RegList regs={VECTOR_REGS} values={regs} flashSeq={flashSeq} />
+          <RegList regs={VECTOR_REGS} values={regs} flashSeq={flashSeq} nameMode={nameMode} />
         </Section>
         <Section title="Counters" defaultOpen={false}>
-          <RegList regs={COUNTER_REGS} values={regs} flashSeq={flashSeq} />
+          <RegList regs={COUNTER_REGS} values={regs} flashSeq={flashSeq} nameMode={nameMode} />
         </Section>
       </aside>
     </div>
