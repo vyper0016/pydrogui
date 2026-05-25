@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 
 const API = '/api'
 const SESSION_KEY = 'pydrogui.session_id'
@@ -384,7 +384,7 @@ export default function App() {
   const [regs, setRegs] = useState<RegMap>({})
   const [flashSeq, setFlashSeq] = useState<Record<string, number>>({})
   const prevRegsRef = useRef<RegMap>({})
-  const lastInstructionPcRef = useRef<string | null>(null)
+  const [lastInstructionPc, setLastInstructionPc] = useState<string | null>(null)
   const [scrollRequest, setScrollRequest] = useState<ScrollRequest | null>(null)
   const [lastInstr, setLastInstr] = useState('')
   const [error, setError] = useState('')
@@ -401,6 +401,16 @@ export default function App() {
   const inited = useRef(false)
 
   const pcNormalized = normalizePc(regs.pc)
+
+  const disasmPcs = useMemo(() => {
+    const s = new Set<string>()
+    for (const it of disasm) {
+      if (it.type === 'instruction' || it.type === 'label') s.add(it.pc)
+    }
+    return s
+  }, [disasm])
+
+  const canScrollLast = lastInstructionPc !== null && disasmPcs.has(lastInstructionPc)
 
   async function loadDisasm(binaryId: string): Promise<void> {
     pruneDisasmCache(binaryId)
@@ -433,7 +443,6 @@ export default function App() {
         apiFetchJson<string>('/disassemble-last-instruction'),
       ])
       const prev = prevRegsRef.current
-      lastInstructionPcRef.current = normalizePc(prev.pc)
       setFlashSeq((cur) => {
         const next = { ...cur }
         for (const k of Object.keys(regMap)) {
@@ -454,7 +463,9 @@ export default function App() {
 
   async function step() {
     try {
+      const snapshot = normalizePc(prevRegsRef.current.pc)
       await apiFetch('/step', 'POST')
+      setLastInstructionPc(snapshot)
       await updateDisplay()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -464,6 +475,7 @@ export default function App() {
   async function run() {
     try {
       await apiFetch(`/run?steps=${runSteps}`, 'POST')
+      setLastInstructionPc(null)
       await updateDisplay()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -473,6 +485,7 @@ export default function App() {
   async function reset() {
     try {
       await apiFetch('/reset', 'POST')
+      setLastInstructionPc(null)
       await updateDisplay()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -493,7 +506,7 @@ export default function App() {
     setRegs({})
     setFlashSeq({})
     prevRegsRef.current = {}
-    lastInstructionPcRef.current = null
+    setLastInstructionPc(null)
     setScrollRequest(null)
     setLastInstr('')
     setDisasm([])
@@ -685,19 +698,26 @@ export default function App() {
               {lastInstr && (
                 <span className="flex items-center gap-1">
                   <span className="text-gray-600">last instruction:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const target = lastInstructionPcRef.current
-                      if (!target) return
-                      setScrollRequest((cur) => ({ pc: target, seq: (cur?.seq ?? 0) + 1 }))
-                    }}
-                    disabled={!lastInstructionPcRef.current}
-                    title="scroll to last instruction"
-                    className="text-gray-900 px-2 py-0.5 bg-gray-100 rounded border border-gray-200 hover:bg-gray-200 disabled:opacity-60 cursor-pointer font-mono"
-                  >
-                    {lastInstr}
-                  </button>
+                  {canScrollLast ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!lastInstructionPc) return
+                        setScrollRequest((cur) => ({
+                          pc: lastInstructionPc,
+                          seq: (cur?.seq ?? 0) + 1,
+                        }))
+                      }}
+                      title="scroll to last instruction"
+                      className="text-gray-900 px-2 py-0.5 bg-gray-100 rounded border border-gray-200 hover:bg-gray-200 cursor-pointer font-mono"
+                    >
+                      {lastInstr}
+                    </button>
+                  ) : (
+                    <span className="text-gray-900 px-2 py-0.5 bg-gray-100 rounded border border-gray-200 font-mono">
+                      {lastInstr}
+                    </span>
+                  )}
                 </span>
               )}
             </span>
