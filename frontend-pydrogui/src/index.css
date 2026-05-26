@@ -10,6 +10,26 @@
   border-radius: 2px;
 }
 
+@keyframes reg-flash-green {
+  0% { background-color: rgb(134 239 172 / 0.9); }
+  100% { background-color: rgb(134 239 172 / 0); }
+}
+
+.reg-flash-green {
+  animation: reg-flash-green 1.8s ease-out forwards;
+  border-radius: 2px;
+}
+
+@keyframes reg-flash-red {
+  0% { background-color: rgb(252 165 165 / 0.9); }
+  100% { background-color: rgb(252 165 165 / 0); }
+}
+
+.reg-flash-red {
+  animation: reg-flash-red 1.8s ease-out forwards;
+  border-radius: 2px;
+}
+
 @keyframes disasm-flash {
   0% { background-color: rgb(253 224 71 / 0.85); }
   100% { background-color: rgb(253 224 71 / 0); }
