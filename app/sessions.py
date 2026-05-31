@@ -5,9 +5,8 @@ import threading
 
 from fastapi import HTTPException, Header
 
-from _pydrofoil import RISCV64
-
 import binaries
+from machine import Machine
 
 SESSION_TTL_SECONDS = 30 * 60
 
@@ -18,7 +17,7 @@ class Session:
         self.binary_id = binary_id
         self.binary_path = binaries.resolve(binary_id)
         self.last_access = time.monotonic()
-        self.reset_machine()
+        self.machine = Machine(self.binary_path)
 
     def touch(self) -> None:
         self.last_access = time.monotonic()
@@ -27,9 +26,7 @@ class Session:
         return now - self.last_access > SESSION_TTL_SECONDS
 
     def reset_machine(self) -> None:
-        self.machine = RISCV64(self.binary_path, dtb=True)
-        self.machine.set_verbosity(0)
-
+        self.machine.reset()
 
 
 _sessions: dict[str, Session] = {}
