@@ -5,6 +5,9 @@ export const BINARY_NAME_KEY = 'pydrogui.binary_name'
 export const BINARY_ID_KEY = 'pydrogui.binary_id'
 export const NAME_MODE_KEY = 'pydrogui.name_mode'
 export const DISASM_HEIGHT_KEY = 'pydrogui.disasm_height_px'
+export const MEM_ADDR_KEY = 'pydrogui.mem_addr'
+export const MEM_COLS_KEY = 'pydrogui.mem_cols'
+export const MEM_ROWS_KEY = 'pydrogui.mem_rows'
 const DISASM_KEY_PREFIX = 'pydrogui.disasm.'
 
 export function loadCachedDisasm(binaryId: string): DisasmItem[] | null {

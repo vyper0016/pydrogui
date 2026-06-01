@@ -107,6 +107,10 @@ export async function apiFetch(path: string, method = 'GET'): Promise<string> {
   return res.text()
 }
 
+export async function setMemoryPageSize(pageSize: number): Promise<void> {
+  await apiFetch(`/set-memory-page-size?page_size=${pageSize}`, 'POST')
+}
+
 export async function apiFetchJson<T>(path: string, method = 'GET'): Promise<T> {
   const res = await checkSession(await rawFetch(path, method))
   if (!res.ok) throw new Error(await extractErrorMessage(res))

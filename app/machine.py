@@ -4,12 +4,12 @@ import logging
 
 log = logging.getLogger(__name__)
 
-PAGE_SIZE = 16 * 16 # bytes
 WIDTH = 1 # bytes
 
 class Machine:
-    def __init__(self, binary_path: str) -> None:
+    def __init__(self, binary_path: str, page_size: int = 16*16) -> None:
         self.binary_path = binary_path
+        self.page_size = page_size # bytes per page
         self.reset()
 
     def reset(self) -> None:
@@ -23,10 +23,14 @@ class Machine:
 
     def clamp_address(self, addr: int) -> int:
         '''Clamp the address to the start of its memory page.'''
-        log.debug("clamping address addr=0x%X to 0x%X", addr, addr - (addr % PAGE_SIZE))
-        return addr - (addr % PAGE_SIZE)
+        log.debug("clamping address addr=0x%X to 0x%X", addr, addr - (addr % self.page_size))
+        return addr - (addr % self.page_size)
     
     def read_memory_page(self, addr: int) -> dict:
         page_start = self.clamp_address(addr)
-        values = [self._inner.read_memory(page_start + offset, WIDTH) for offset in range(PAGE_SIZE)]
-        return {'start': hex(page_start), 'values': values, 'page_size': PAGE_SIZE, 'step': WIDTH}
+        values = [self._inner.read_memory(page_start + offset, WIDTH) for offset in range(self.page_size)]
+        return {'start': hex(page_start), 'values': values, 'page_size': self.page_size, 'step': WIDTH}
+
+    def set_mem_page_size(self, page_size: int) -> None:
+        self.page_size = page_size
+        log.info("page size set to %d bytes", self.page_size)

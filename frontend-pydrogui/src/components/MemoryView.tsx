@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react'
-import { apiFetchJson, type MemoryPage } from '../api'
+import { useEffect, useRef, useState } from 'react'
+import { apiFetchJson, setMemoryPageSize, type MemoryPage } from '../api'
+import { MEM_ADDR_KEY, MEM_COLS_KEY, MEM_ROWS_KEY } from '../storage'
 
-const COLS = 16
+function readCount(key: string, fallback: number): number {
+  const n = parseInt(localStorage.getItem(key) ?? '', 10)
+  return Number.isFinite(n) && n >= 1 ? n : fallback
+}
 
 function hexByte(n: number): string {
   return n.toString(16).padStart(2, '0')
@@ -18,24 +22,40 @@ export function MemoryView({
   hasSession: boolean
   refreshKey: number
 }) {
-  const [addrInput, setAddrInput] = useState('0x0')
+  const [addrInput, setAddrInput] = useState(
+    () => localStorage.getItem(MEM_ADDR_KEY) ?? '0x0',
+  )
   const [page, setPage] = useState<MemoryPage | null>(null)
+  const [cols, setCols] = useState(() => readCount(MEM_COLS_KEY, 16))
+  const [rows, setRows] = useState(() => readCount(MEM_ROWS_KEY, 16))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  // Refs let press-and-hold ticks compound without waiting on async state.
+  const addrNumRef = useRef(parseInt(addrInput, 16) || 0)
+  const stepRef = useRef(256)
+  const reqSeqRef = useRef(0)
+  const holdRef = useRef<number | null>(null)
+  const holdDelayRef = useRef<number | null>(null)
+
   async function load(addr: string) {
     if (!hasSession) return
+    const seq = ++reqSeqRef.current
     setLoading(true)
     setError('')
     try {
       const data = await apiFetchJson<MemoryPage>(
         `/read-memory-page/${encodeURIComponent(addr.trim())}`,
       )
+      if (seq !== reqSeqRef.current) return // stale response, newer request in flight
       setPage(data)
+      addrNumRef.current = parseInt(data.start, 16)
+      stepRef.current = data.page_size
+      localStorage.setItem(MEM_ADDR_KEY, data.start)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      if (seq === reqSeqRef.current) setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setLoading(false)
+      if (seq === reqSeqRef.current) setLoading(false)
     }
   }
 
@@ -45,19 +65,80 @@ export function MemoryView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey])
 
+  // On session start, push stored geometry then load the stored address;
+  // on session end, clear the view.
+  useEffect(() => {
+    if (!hasSession) {
+      setPage(null)
+      return
+    }
+    ;(async () => {
+      try {
+        await setMemoryPageSize(cols * rows)
+      } catch {
+        // server may reject; load anyway with whatever size it has
+      }
+      load(addrInput)
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasSession])
+
   function stepPage(dir: 1 | -1) {
-    if (!page) return
-    const next = Math.max(0, parseInt(page.start, 16) + dir * page.page_size)
+    if (!hasSession) return
+    const next = Math.max(0, addrNumRef.current + dir * stepRef.current)
+    addrNumRef.current = next
     const addr = '0x' + next.toString(16)
     setAddrInput(addr)
     load(addr)
   }
 
+  function startHold(dir: 1 | -1) {
+    if (!page || holdRef.current !== null || holdDelayRef.current !== null) return
+    stepPage(dir) // immediate first step
+    // Start fast repeat only after the button is held for 1s.
+    holdDelayRef.current = window.setTimeout(() => {
+      holdDelayRef.current = null
+      holdRef.current = window.setInterval(() => stepPage(dir), 120)
+    }, 1000)
+  }
+
+  function stopHold() {
+    if (holdDelayRef.current !== null) {
+      window.clearTimeout(holdDelayRef.current)
+      holdDelayRef.current = null
+    }
+    if (holdRef.current !== null) {
+      window.clearInterval(holdRef.current)
+      holdRef.current = null
+    }
+  }
+
+  // Clear any running hold interval on unmount.
+  useEffect(() => stopHold, [])
+
+  async function applyGeometry(nextCols: number, nextRows: number) {
+    setCols(nextCols)
+    setRows(nextRows)
+    if (Number.isFinite(nextCols) && nextCols >= 1) {
+      localStorage.setItem(MEM_COLS_KEY, String(nextCols))
+    }
+    if (Number.isFinite(nextRows) && nextRows >= 1) {
+      localStorage.setItem(MEM_ROWS_KEY, String(nextRows))
+    }
+    if (!hasSession || nextCols < 1 || nextRows < 1) return
+    try {
+      await setMemoryPageSize(nextCols * nextRows)
+      load(page ? page.start : addrInput)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   const base = page ? parseInt(page.start, 16) : 0
-  const rows: number[][] = []
+  const gridRows: number[][] = []
   if (page) {
-    for (let i = 0; i < page.values.length; i += COLS) {
-      rows.push(page.values.slice(i, i + COLS))
+    for (let i = 0; i < page.values.length; i += cols) {
+      gridRows.push(page.values.slice(i, i + cols))
     }
   }
 
@@ -65,6 +146,26 @@ export function MemoryView({
     <div className="mt-4 border border-gray-200 rounded bg-white">
       <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200">
         <span className="font-semibold text-sm text-gray-700">Memory</span>
+        <label className="flex items-center gap-1 text-xs text-gray-400">
+          cols
+          <input
+            type="text"
+            inputMode="numeric"
+            value={cols}
+            onChange={(e) => applyGeometry(Number(e.target.value), rows)}
+            className="w-14 px-1 py-0.5 border border-gray-200 rounded text-xs font-mono text-gray-500"
+          />
+        </label>
+        <label className="flex items-center gap-1 text-xs text-gray-400">
+          rows
+          <input
+            type="text"
+            inputMode="numeric"
+            value={rows}
+            onChange={(e) => applyGeometry(cols, Number(e.target.value))}
+            className="w-14 px-1 py-0.5 border border-gray-200 rounded text-xs font-mono text-gray-500"
+          />
+        </label>
         <div className="ml-auto flex items-center gap-1">
           <input
             type="text"
@@ -76,30 +177,31 @@ export function MemoryView({
           />
           <div className="flex flex-col leading-none">
             <button
-              onClick={() => stepPage(1)}
+              onMouseDown={() => startHold(1)}
+              onMouseUp={stopHold}
+              onMouseLeave={stopHold}
+              onTouchStart={(e) => { e.preventDefault(); startHold(1) }}
+              onTouchEnd={stopHold}
               disabled={!page}
-              title="next page"
-              className="px-1 text-[9px] text-black hover:bg-gray-200 disabled:opacity-40 disabled:hover:bg-transparent rounded-t cursor-pointer"
+              title="next page (hold to scroll)"
+              className="px-1 text-[9px] text-black hover:bg-gray-200 disabled:opacity-40 disabled:hover:bg-transparent rounded-t cursor-pointer select-none"
             >
               ▲
             </button>
             <button
-              onClick={() => stepPage(-1)}
+              onMouseDown={() => startHold(-1)}
+              onMouseUp={stopHold}
+              onMouseLeave={stopHold}
+              onTouchStart={(e) => { e.preventDefault(); startHold(-1) }}
+              onTouchEnd={stopHold}
               disabled={!page}
-              title="previous page"
-              className="px-1 text-[9px] text-black hover:bg-gray-200 disabled:opacity-40 disabled:hover:bg-transparent rounded-b cursor-pointer"
+              title="previous page (hold to scroll)"
+              className="px-1 text-[9px] text-black hover:bg-gray-200 disabled:opacity-40 disabled:hover:bg-transparent rounded-b cursor-pointer select-none"
             >
               ▼
             </button>
           </div>
         </div>
-        <button
-          onClick={() => load(addrInput)}
-          disabled={!hasSession}
-          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-300 text-white font-semibold rounded cursor-pointer text-sm"
-        >
-          Go
-        </button>
       </div>
 
       {error && <p className="px-3 py-2 text-sm text-red-600">Error: {error}</p>}
@@ -117,8 +219,8 @@ export function MemoryView({
             <span>bytes</span>
             <span>ascii</span>
           </div>
-          {rows.map((row, r) => {
-            const rowAddr = base + r * COLS
+          {gridRows.map((row, r) => {
+            const rowAddr = base + r * cols
             return (
               <div
                 key={r}
