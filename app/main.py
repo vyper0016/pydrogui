@@ -84,10 +84,7 @@ def disassemble_last_instruction(session: Session = Depends(sessions.get)) -> st
 @api.post('/write-register/{reg_name}', tags=["Registers"])
 def write_register(reg_name: str, value_str: str, session: Session = Depends(sessions.get)) -> str:
     try:
-        if value_str.startswith('0x'):
-            value = int(value_str, 16)
-        else:
-            value = int(value_str)
+        value = str_to_int(value_str)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid value: {value_str} for register {reg_name}")
     
@@ -98,6 +95,14 @@ def write_register(reg_name: str, value_str: str, session: Session = Depends(ses
         raise HTTPException(status_code=404, detail=f"{reg_name}: {e}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"{reg_name}: {e}")
+
+
+def str_to_int(s: str) -> int:
+    if s.startswith('0x'):
+        value = int(s, 16)
+    else:
+        value = int(s)
+    return value
 
 
 @api.get('/read-register/{reg_name}', tags=["Registers"])
@@ -122,10 +127,10 @@ def read_registers_batch(
     return {reg: read_register(reg, session) for reg in reg_names}
 
 
-@api.get('/read-memory/{address}/{bits}', tags=["Memory"])
-def read_memory(address: int, bits: int, session: Session = Depends(sessions.get)) -> int:
+@api.get('/read-memory-page/{address}', tags=["Memory"])
+def read_memory_page(address: str, session: Session = Depends(sessions.get)) -> dict:
     try:
-        return session.machine.read_memory(address, bits)
+        return session.machine.read_memory_page(str_to_int(address))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
