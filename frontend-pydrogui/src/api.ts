@@ -4,6 +4,13 @@ export const API = '/api'
 
 export type BinaryItem = { id: string; name: string; size: number }
 
+export type MemoryPage = {
+  start: string
+  values: number[]
+  page_size: number
+  step: number
+}
+
 export type CommitResult =
   | { ok: true; changed: boolean }
   | { ok: false; error: string }

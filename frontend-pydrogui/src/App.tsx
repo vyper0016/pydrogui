@@ -35,6 +35,7 @@ import {
 import { BinaryPicker } from './components/BinaryPicker'
 import { ControlBar } from './components/ControlBar'
 import { DisasmView, type ScrollRequest } from './components/DisasmView'
+import { MemoryView } from './components/MemoryView'
 import { RegSidebar } from './components/RegSidebar'
 
 export default function App() {
@@ -73,6 +74,7 @@ export default function App() {
   const [pickerOpen, setPickerOpen] = useState<boolean>(getSessionId() === null)
   const [disasm, setDisasm] = useState<DisasmItem[]>([])
   const [disasmLoading, setDisasmLoading] = useState(false)
+  const [memRefresh, setMemRefresh] = useState(0)
   const inited = useRef(false)
 
   useEffect(() => {
@@ -152,6 +154,7 @@ export default function App() {
       prevRegsRef.current = regMap
       setRegs(regMap)
       setLastInstr(instVal)
+      setMemRefresh((n) => n + 1)
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -313,6 +316,8 @@ export default function App() {
         ) : (
           <DisasmView items={disasm} pc={pcNormalized} scrollRequest={scrollRequest} />
         )}
+
+        <MemoryView hasSession={hasSession} refreshKey={memRefresh} />
 
         {error && (
           <p className="mt-4 text-sm text-red-600">Error: {error}</p>

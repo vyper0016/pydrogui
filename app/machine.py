@@ -4,7 +4,7 @@ import logging
 
 log = logging.getLogger(__name__)
 
-PAGE_SIZE = 100 # bytes
+PAGE_SIZE = 16 * 16 # bytes
 WIDTH = 1 # bytes
 
 class Machine:
