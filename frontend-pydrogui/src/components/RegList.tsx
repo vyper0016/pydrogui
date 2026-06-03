@@ -9,12 +9,14 @@ function EditableRegValue({
   flashClass,
   flashKey,
   onCommit,
+  onJumpToMemory,
 }: {
   reg: string
   value: string
   flashClass: string
   flashKey: string | number
   onCommit: (reg: string, raw: string) => Promise<CommitResult>
+  onJumpToMemory: (addr: string) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
@@ -77,7 +79,7 @@ function EditableRegValue({
   }
 
   return (
-    <div className="relative">
+    <div className="relative flex items-start gap-1">
       <span
         key={flashKey}
         onClick={() => {
@@ -85,12 +87,21 @@ function EditableRegValue({
           setEditing(true)
         }}
         className={
-          'text-gray-900 break-all px-1 -mx-1 cursor-text hover:bg-gray-100 rounded inline-block w-full' +
+          'text-gray-900 break-all px-1 -mx-1 cursor-text hover:bg-gray-100 rounded inline-block flex-1 min-w-0' +
           (flashClass ? ' ' + flashClass : '')
         }
       >
         {value || ' '}
       </span>
+      {value && (
+        <button
+          onClick={() => onJumpToMemory(value)}
+          title="inspect this address in memory"
+          className="shrink-0 px-1 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded cursor-pointer leading-none"
+        >
+          →
+        </button>
+      )}
       {popupError && (
         <div
           onClick={() => setPopupError(null)}
@@ -116,12 +127,14 @@ export function RegList({
   flash,
   nameMode,
   onCommit,
+  onJumpToMemory,
 }: {
   regs: string[]
   values: RegMap
   flash: FlashMap
   nameMode: NameMode
   onCommit: (reg: string, raw: string) => Promise<CommitResult>
+  onJumpToMemory: (addr: string) => void
 }) {
   return (
     <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 font-mono text-xs">
@@ -141,6 +154,7 @@ export function RegList({
               flashClass={flashClass}
               flashKey={flashKey}
               onCommit={onCommit}
+              onJumpToMemory={onJumpToMemory}
             />
           </div>
         )

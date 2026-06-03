@@ -18,9 +18,11 @@ function ascii(n: number): string {
 export function MemoryView({
   hasSession,
   refreshKey,
+  jump,
 }: {
   hasSession: boolean
   refreshKey: number
+  jump: { addr: string; seq: number } | null
 }) {
   const [addrInput, setAddrInput] = useState(
     () => localStorage.getItem(MEM_ADDR_KEY) ?? '0x0',
@@ -30,6 +32,7 @@ export function MemoryView({
   const [rows, setRows] = useState(() => readCount(MEM_ROWS_KEY, 16))
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [addrFocused, setAddrFocused] = useState(false)
 
   // Refs let press-and-hold ticks compound without waiting on async state.
   const addrNumRef = useRef(parseInt(addrInput, 16) || 0)
@@ -82,6 +85,14 @@ export function MemoryView({
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasSession])
+
+  // Jump to an address copied from a register.
+  useEffect(() => {
+    if (!jump) return
+    setAddrInput(jump.addr)
+    load(jump.addr)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jump?.seq])
 
   function stepPage(dir: 1 | -1) {
     if (!hasSession) return
@@ -142,6 +153,14 @@ export function MemoryView({
     }
   }
 
+  // While the address box is focused, highlight the byte at that exact address.
+  const target = parseInt(addrInput, 16)
+  const highlightIdx =
+    addrFocused && page && Number.isFinite(target) &&
+    target >= base && target < base + page.values.length
+      ? target - base
+      : -1
+
   return (
     <div className="mt-4 border border-gray-200 rounded bg-white">
       <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200">
@@ -171,6 +190,8 @@ export function MemoryView({
             type="text"
             value={addrInput}
             onChange={(e) => setAddrInput(e.target.value)}
+            onFocus={() => setAddrFocused(true)}
+            onBlur={() => setAddrFocused(false)}
             onKeyDown={(e) => e.key === 'Enter' && load(addrInput)}
             placeholder="0x0"
             className="w-32 px-2 py-1 border border-gray-300 rounded text-sm font-mono"
@@ -229,11 +250,34 @@ export function MemoryView({
                 <span className="text-gray-500">
                   0x{rowAddr.toString(16).padStart(4, '0')}
                 </span>
-                <span className="text-gray-800 tracking-wider">
-                  {row.map((b) => hexByte(b)).join(' ')}
+                <span className="text-gray-800">
+                  {row.map((b, c) => {
+                    const hot = r * cols + c === highlightIdx
+                    return (
+                      <span
+                        key={c}
+                        className={
+                          'px-0.5 rounded ' +
+                          (hot ? 'bg-yellow-300 text-gray-900' : '')
+                        }
+                      >
+                        {hexByte(b)}
+                      </span>
+                    )
+                  })}
                 </span>
                 <span className="text-gray-500 whitespace-pre">
-                  {row.map((b) => ascii(b)).join('')}
+                  {row.map((b, c) => {
+                    const hot = r * cols + c === highlightIdx
+                    return (
+                      <span
+                        key={c}
+                        className={hot ? 'bg-yellow-300 text-gray-900 rounded' : ''}
+                      >
+                        {ascii(b)}
+                      </span>
+                    )
+                  })}
                 </span>
               </div>
             )

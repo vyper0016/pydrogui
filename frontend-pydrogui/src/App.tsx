@@ -75,6 +75,11 @@ export default function App() {
   const [disasm, setDisasm] = useState<DisasmItem[]>([])
   const [disasmLoading, setDisasmLoading] = useState(false)
   const [memRefresh, setMemRefresh] = useState(0)
+  const [memJump, setMemJump] = useState<{ addr: string; seq: number } | null>(null)
+
+  function jumpToMemory(addr: string) {
+    setMemJump((cur) => ({ addr, seq: (cur?.seq ?? 0) + 1 }))
+  }
   const inited = useRef(false)
 
   useEffect(() => {
@@ -317,7 +322,7 @@ export default function App() {
           <DisasmView items={disasm} pc={pcNormalized} scrollRequest={scrollRequest} />
         )}
 
-        <MemoryView hasSession={hasSession} refreshKey={memRefresh} />
+        <MemoryView hasSession={hasSession} refreshKey={memRefresh} jump={memJump} />
 
         {error && (
           <p className="mt-4 text-sm text-red-600">Error: {error}</p>
@@ -330,6 +335,7 @@ export default function App() {
         nameMode={nameMode}
         onNameModeChange={setNameMode}
         onCommit={commitWrite}
+        onJumpToMemory={jumpToMemory}
       />
     </div>
   )

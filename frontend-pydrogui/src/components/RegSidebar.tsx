@@ -17,14 +17,16 @@ export function RegSidebar({
   nameMode,
   onNameModeChange,
   onCommit,
+  onJumpToMemory,
 }: {
   regs: RegMap
   flash: FlashMap
   nameMode: NameMode
   onNameModeChange: (m: NameMode) => void
   onCommit: (reg: string, raw: string) => Promise<CommitResult>
+  onJumpToMemory: (addr: string) => void
 }) {
-  const common = { values: regs, flash, nameMode, onCommit }
+  const common = { values: regs, flash, nameMode, onCommit, onJumpToMemory }
   return (
     <aside className="space-y-3">
       <div className="flex items-center justify-end gap-1 text-xs">
