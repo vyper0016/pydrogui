@@ -41,12 +41,39 @@ export function MemoryView({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [addrFocused, setAddrFocused] = useState(false)
-  // Byte to flash after a jump (absolute addr + seq to retrigger the animation).
-  const [flashByte, setFlashByte] = useState<{ addr: number; seq: number } | null>(null)
+  // Byte to flash (jump = yellow, write ok = green, write error = red).
+  const [flashByte, setFlashByte] = useState<
+    { addr: number; seq: number; cls: string } | null
+  >(null)
+  const flashSeqRef = useRef(0)
   // Inline single-byte edit: index into the current page, plus its draft hex.
   const [editIdx, setEditIdx] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState('')
   const [busy, setBusy] = useState(false)
+  // Transient inline-edit error popup, and header write ok/error toast.
+  const [inlineError, setInlineError] = useState<string | null>(null)
+  const [headerMsg, setHeaderMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const inlineTimer = useRef<number | null>(null)
+  const headerTimer = useRef<number | null>(null)
+
+  function showInlineError(msg: string) {
+    setInlineError(msg)
+    if (inlineTimer.current) window.clearTimeout(inlineTimer.current)
+    inlineTimer.current = window.setTimeout(() => setInlineError(null), 4500)
+  }
+
+  function showHeaderMsg(ok: boolean, text: string) {
+    setHeaderMsg({ ok, text })
+    if (headerTimer.current) window.clearTimeout(headerTimer.current)
+    headerTimer.current = window.setTimeout(() => setHeaderMsg(null), 3000)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (inlineTimer.current) window.clearTimeout(inlineTimer.current)
+      if (headerTimer.current) window.clearTimeout(headerTimer.current)
+    }
+  }, [])
   // Header write form for wide / off-screen writes.
   const [wAddr, setWAddr] = useState('')
   const [wValue, setWValue] = useState('')
@@ -109,7 +136,8 @@ export function MemoryView({
     if (!jump) return
     setAddrInput(jump.addr)
     const target = parseInt(jump.addr, 16)
-    if (Number.isFinite(target)) setFlashByte({ addr: target, seq: jump.seq })
+    if (Number.isFinite(target))
+      setFlashByte({ addr: target, seq: ++flashSeqRef.current, cls: 'reg-flash' })
     load(jump.addr)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jump?.seq])
@@ -176,8 +204,9 @@ export function MemoryView({
     }
     const parsed = parseInt(raw, 16)
     if (!Number.isFinite(parsed) || parsed < 0 || parsed > 0xff) {
-      setError(`Invalid byte: ${raw}`)
       setEditIdx(null)
+      setFlashByte({ addr: base + idx, seq: ++flashSeqRef.current, cls: 'reg-flash-red' })
+      showInlineError(`Invalid byte: ${raw}`)
       return
     }
     setBusy(true)
@@ -185,8 +214,11 @@ export function MemoryView({
       await writeMemory('0x' + (base + idx).toString(16), '0x' + parsed.toString(16), 1)
       setEditIdx(null)
       await load(page.start)
+      setFlashByte({ addr: base + idx, seq: ++flashSeqRef.current, cls: 'reg-flash-green' })
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      setEditIdx(null)
+      setFlashByte({ addr: base + idx, seq: ++flashSeqRef.current, cls: 'reg-flash-red' })
+      showInlineError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
@@ -198,7 +230,7 @@ export function MemoryView({
     const addr = wAddr.trim()
     const value = wValue.trim()
     if (!addr || !value) {
-      setError('Write needs an address and a value.')
+      showHeaderMsg(false, 'need address + value')
       return
     }
     setBusy(true)
@@ -206,8 +238,9 @@ export function MemoryView({
       await writeMemory(addr, value, wWidth)
       setWValue('')
       await load(page ? page.start : addrInput)
+      showHeaderMsg(true, 'ok')
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      showHeaderMsg(false, err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
@@ -245,7 +278,7 @@ export function MemoryView({
       : -1
 
   return (
-    <div className="mt-4 border border-gray-200 rounded bg-white">
+    <div className="mt-4 border border-gray-200 rounded bg-white relative">
       <div className="flex flex-wrap items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200">
         <span className="font-semibold text-sm text-gray-700">Memory</span>
         <label className="flex items-center gap-1 text-xs text-gray-400">
@@ -345,9 +378,28 @@ export function MemoryView({
         >
           write
         </button>
+        {headerMsg && (
+          <span
+            className={
+              'font-mono ' + (headerMsg.ok ? 'text-green-600' : 'text-red-600')
+            }
+          >
+            {headerMsg.text}
+          </span>
+        )}
       </div>
 
       {error && <p className="px-3 py-2 text-sm text-red-600">Error: {error}</p>}
+
+      {inlineError && (
+        <div
+          onClick={() => setInlineError(null)}
+          title="click to dismiss"
+          className="absolute z-30 right-3 top-12 max-w-[300px] px-2 py-1 bg-red-600 text-white text-xs rounded shadow-lg cursor-pointer break-words"
+        >
+          {inlineError}
+        </div>
+      )}
 
       {loading && !page ? (
         <div className="text-xs text-gray-500 italic p-3">Loading memory…</div>
@@ -414,7 +466,7 @@ export function MemoryView({
                           (hot
                             ? 'bg-yellow-300 text-gray-900'
                             : flash
-                              ? 'reg-flash'
+                              ? flashByte.cls
                               : acc === 'write'
                                 ? 'mem-flash-write'
                                 : acc === 'read'
@@ -445,7 +497,7 @@ export function MemoryView({
                           hot
                             ? 'bg-yellow-300 text-gray-900 rounded'
                             : flash
-                              ? 'reg-flash'
+                              ? flashByte.cls
                               : acc === 'write'
                                 ? 'mem-flash-write'
                                 : acc === 'read'
