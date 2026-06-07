@@ -33,6 +33,8 @@ export function MemoryView({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [addrFocused, setAddrFocused] = useState(false)
+  // Byte to flash after a jump (absolute addr + seq to retrigger the animation).
+  const [flashByte, setFlashByte] = useState<{ addr: number; seq: number } | null>(null)
   // Inline single-byte edit: index into the current page, plus its draft hex.
   const [editIdx, setEditIdx] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState('')
@@ -98,6 +100,8 @@ export function MemoryView({
   useEffect(() => {
     if (!jump) return
     setAddrInput(jump.addr)
+    const target = parseInt(jump.addr, 16)
+    if (Number.isFinite(target)) setFlashByte({ addr: target, seq: jump.seq })
     load(jump.addr)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jump?.seq])
@@ -367,9 +371,10 @@ export function MemoryView({
                         />
                       )
                     }
+                    const flash = flashByte !== null && base + idx === flashByte.addr
                     return (
                       <span
-                        key={c}
+                        key={flash ? `${c}-${flashByte.seq}` : c}
                         onClick={() => {
                           setEditDraft(hexByte(b))
                           setEditIdx(idx)
@@ -377,7 +382,7 @@ export function MemoryView({
                         title="click to edit byte"
                         className={
                           'px-0.5 rounded cursor-text hover:bg-gray-200 ' +
-                          (hot ? 'bg-yellow-300 text-gray-900' : '')
+                          (hot ? 'bg-yellow-300 text-gray-900' : flash ? 'reg-flash' : '')
                         }
                       >
                         {hexByte(b)}
@@ -387,11 +392,15 @@ export function MemoryView({
                 </span>
                 <span className="text-gray-500 whitespace-pre">
                   {row.map((b, c) => {
-                    const hot = r * cols + c === highlightIdx
+                    const idx = r * cols + c
+                    const hot = idx === highlightIdx
+                    const flash = flashByte !== null && base + idx === flashByte.addr
                     return (
                       <span
-                        key={c}
-                        className={hot ? 'bg-yellow-300 text-gray-900 rounded' : ''}
+                        key={flash ? `${c}-${flashByte.seq}` : c}
+                        className={
+                          hot ? 'bg-yellow-300 text-gray-900 rounded' : flash ? 'reg-flash' : ''
+                        }
                       >
                         {ascii(b)}
                       </span>
