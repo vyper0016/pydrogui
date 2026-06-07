@@ -114,8 +114,11 @@ export default function App() {
     stepCountRef.current = 0
   }
 
+  const memViewRef = useRef<HTMLDivElement>(null)
+
   function jumpToMemory(addr: string) {
     setMemJump((cur) => ({ addr, seq: (cur?.seq ?? 0) + 1 }))
+    memViewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   const inited = useRef(false)
 
@@ -368,9 +371,15 @@ export default function App() {
           <DisasmView items={disasm} pc={pcNormalized} scrollRequest={scrollRequest} />
         )}
 
-        <MemoryView hasSession={hasSession} refreshKey={memRefresh} jump={memJump} />
+        <div ref={memViewRef}>
+          <MemoryView hasSession={hasSession} refreshKey={memRefresh} jump={memJump} />
+        </div>
 
-        <AccessHistory history={memHistory} onClear={clearHistory} />
+        <AccessHistory
+          history={memHistory}
+          onClear={clearHistory}
+          onJumpToMemory={jumpToMemory}
+        />
 
         {error && (
           <p className="mt-4 text-sm text-red-600">Error: {error}</p>

@@ -11,9 +11,11 @@ function isWrite(type: string): boolean {
 export function AccessHistory({
   history,
   onClear,
+  onJumpToMemory,
 }: {
   history: AccessEntry[]
   onClear: () => void
+  onJumpToMemory: (addr: string) => void
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
 
@@ -87,7 +89,16 @@ export function AccessHistory({
                   <span className={write ? 'text-rose-700' : 'text-sky-700'}>
                     {write ? 'write' : 'read'}
                   </span>
-                  <span className="text-gray-700 break-all">{a.addr}</span>
+                  <span className="flex items-start gap-1 min-w-0">
+                    <span className="text-gray-700 break-all flex-1 min-w-0">{a.addr}</span>
+                    <button
+                      onClick={() => onJumpToMemory(a.addr)}
+                      title="inspect this address in memory"
+                      className="shrink-0 px-1 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded cursor-pointer leading-none"
+                    >
+                      →
+                    </button>
+                  </span>
                   <span className="text-gray-500">{a.width}</span>
                   <span className="text-gray-700 break-all">
                     {a.value < 0 ? '-0x' : '0x'}

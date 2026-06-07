@@ -122,6 +122,18 @@ export async function stepMem(): Promise<MemAccess[]> {
   return apiFetchJson<MemAccess[]>('/step-mem', 'POST')
 }
 
+export async function writeMemory(
+  address: string,
+  value: string,
+  width = 8,
+): Promise<void> {
+  await apiFetch(
+    `/write-memory?address=${encodeURIComponent(address)}` +
+      `&value=${encodeURIComponent(value)}&width=${width}`,
+    'POST',
+  )
+}
+
 export async function apiFetchJson<T>(path: string, method = 'GET'): Promise<T> {
   const res = await checkSession(await rawFetch(path, method))
   if (!res.ok) throw new Error(await extractErrorMessage(res))

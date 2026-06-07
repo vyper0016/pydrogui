@@ -144,6 +144,15 @@ def set_memory_page_size(page_size: int, session: Session = Depends(sessions.get
         raise HTTPException(status_code=400, detail=str(e))
     
     
+@api.post('/write-memory', tags=["Memory"])
+def write_memory(address: str, value: str, width: int = 8, session: Session = Depends(sessions.get)) -> dict:
+    try:        
+        session.machine.write_memory(str_to_int(address), str_to_int(value), width)
+        return {'status': 'success'}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    
 @api.post('/step', tags=["Execution Control"])
 def step(session: Session = Depends(sessions.get)) -> str:
     """Execute a single instruction"""

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { apiFetchJson, setMemoryPageSize, type MemoryPage } from '../api'
+import { apiFetchJson, setMemoryPageSize, writeMemory, type MemoryPage } from '../api'
 import { MEM_ADDR_KEY, MEM_COLS_KEY, MEM_ROWS_KEY } from '../storage'
 
 function readCount(key: string, fallback: number): number {
@@ -33,6 +33,14 @@ export function MemoryView({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [addrFocused, setAddrFocused] = useState(false)
+  // Inline single-byte edit: index into the current page, plus its draft hex.
+  const [editIdx, setEditIdx] = useState<number | null>(null)
+  const [editDraft, setEditDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+  // Header write form for wide / off-screen writes.
+  const [wAddr, setWAddr] = useState('')
+  const [wValue, setWValue] = useState('')
+  const [wWidth, setWWidth] = useState(8)
 
   // Refs let press-and-hold ticks compound without waiting on async state.
   const addrNumRef = useRef(parseInt(addrInput, 16) || 0)
@@ -145,6 +153,54 @@ export function MemoryView({
     }
   }
 
+  // Write one byte at the given page index from the inline editor draft.
+  async function commitByte(idx: number) {
+    if (!page) return
+    const raw = editDraft.trim()
+    const cur = page.values[idx]
+    if (raw === '' || raw === hexByte(cur)) {
+      setEditIdx(null)
+      return
+    }
+    const parsed = parseInt(raw, 16)
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 0xff) {
+      setError(`Invalid byte: ${raw}`)
+      setEditIdx(null)
+      return
+    }
+    setBusy(true)
+    try {
+      await writeMemory('0x' + (base + idx).toString(16), '0x' + parsed.toString(16), 1)
+      setEditIdx(null)
+      await load(page.start)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Header form write: arbitrary address, value, and width.
+  async function commitWrite() {
+    if (!hasSession || busy) return
+    const addr = wAddr.trim()
+    const value = wValue.trim()
+    if (!addr || !value) {
+      setError('Write needs an address and a value.')
+      return
+    }
+    setBusy(true)
+    try {
+      await writeMemory(addr, value, wWidth)
+      setWValue('')
+      await load(page ? page.start : addrInput)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const base = page ? parseInt(page.start, 16) : 0
   const gridRows: number[][] = []
   if (page) {
@@ -225,6 +281,45 @@ export function MemoryView({
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-gray-200 text-xs text-gray-400">
+        <span className="text-gray-500">write</span>
+        <input
+          type="text"
+          value={wAddr}
+          onChange={(e) => setWAddr(e.target.value)}
+          placeholder="address"
+          className="w-28 px-2 py-1 border border-gray-300 rounded font-mono text-gray-700"
+        />
+        <input
+          type="text"
+          value={wValue}
+          onChange={(e) => setWValue(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && commitWrite()}
+          placeholder="value"
+          title="hex (0x…) or decimal"
+          className="w-28 px-2 py-1 border border-gray-300 rounded font-mono text-gray-700"
+        />
+        <label className="flex items-center gap-1">
+          width
+          <select
+            value={wWidth}
+            onChange={(e) => setWWidth(Number(e.target.value))}
+            className="px-1 py-1 border border-gray-300 rounded font-mono text-gray-700"
+          >
+            {[1, 2, 4, 8].map((w) => (
+              <option key={w} value={w}>{w}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          onClick={commitWrite}
+          disabled={!hasSession || busy}
+          className="px-2 py-1 border border-gray-300 rounded text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer"
+        >
+          write
+        </button>
+      </div>
+
       {error && <p className="px-3 py-2 text-sm text-red-600">Error: {error}</p>}
 
       {loading && !page ? (
@@ -252,12 +347,36 @@ export function MemoryView({
                 </span>
                 <span className="text-gray-800">
                   {row.map((b, c) => {
-                    const hot = r * cols + c === highlightIdx
+                    const idx = r * cols + c
+                    const hot = idx === highlightIdx
+                    if (idx === editIdx) {
+                      return (
+                        <input
+                          key={c}
+                          autoFocus
+                          value={editDraft}
+                          disabled={busy}
+                          maxLength={2}
+                          onChange={(e) => setEditDraft(e.target.value)}
+                          onBlur={() => commitByte(idx)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') commitByte(idx)
+                            else if (e.key === 'Escape') setEditIdx(null)
+                          }}
+                          className="w-[2.5ch] text-center bg-white border border-blue-400 rounded text-gray-900 outline-none mx-0.5 font-mono"
+                        />
+                      )
+                    }
                     return (
                       <span
                         key={c}
+                        onClick={() => {
+                          setEditDraft(hexByte(b))
+                          setEditIdx(idx)
+                        }}
+                        title="click to edit byte"
                         className={
-                          'px-0.5 rounded ' +
+                          'px-0.5 rounded cursor-text hover:bg-gray-200 ' +
                           (hot ? 'bg-yellow-300 text-gray-900' : '')
                         }
                       >
