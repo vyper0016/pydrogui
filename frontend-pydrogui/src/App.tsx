@@ -235,6 +235,7 @@ export default function App() {
     try {
       await apiFetch('/reset', 'POST')
       setLastInstructionPc(null)
+      clearHistory()
       await updateDisplay()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

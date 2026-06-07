@@ -168,8 +168,8 @@ export function MemoryView({
         <label className="flex items-center gap-1 text-xs text-gray-400">
           cols
           <input
-            type="text"
-            inputMode="numeric"
+            type="number"
+            min={1}
             value={cols}
             onChange={(e) => applyGeometry(Number(e.target.value), rows)}
             className="w-14 px-1 py-0.5 border border-gray-200 rounded text-xs font-mono text-gray-500"
@@ -178,8 +178,8 @@ export function MemoryView({
         <label className="flex items-center gap-1 text-xs text-gray-400">
           rows
           <input
-            type="text"
-            inputMode="numeric"
+            type="number"
+            min={1}
             value={rows}
             onChange={(e) => applyGeometry(cols, Number(e.target.value))}
             className="w-14 px-1 py-0.5 border border-gray-200 rounded text-xs font-mono text-gray-500"
