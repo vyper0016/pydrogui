@@ -90,7 +90,6 @@ export function AccessHistory({
                     {write ? 'write' : 'read'}
                   </span>
                   <span className="flex items-start gap-1 min-w-0">
-                    <span className="text-gray-700 break-all flex-1 min-w-0">{a.addr}</span>
                     <button
                       onClick={() => onJumpToMemory(a.addr)}
                       title="inspect this address in memory"
@@ -98,6 +97,7 @@ export function AccessHistory({
                     >
                       →
                     </button>
+                    <span className="text-gray-700 break-all min-w-0">{a.addr}</span>
                   </span>
                   <span className="text-gray-500">{a.width}</span>
                   <span className="text-gray-700 break-all">
