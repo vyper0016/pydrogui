@@ -30,6 +30,26 @@
   border-radius: 2px;
 }
 
+@keyframes mem-flash-read {
+  0% { background-color: rgb(125 211 252 / 0.9); }
+  100% { background-color: rgb(125 211 252 / 0); }
+}
+
+.mem-flash-read {
+  animation: mem-flash-read 1.8s ease-out forwards;
+  border-radius: 2px;
+}
+
+@keyframes mem-flash-write {
+  0% { background-color: rgb(253 164 175 / 0.9); }
+  100% { background-color: rgb(253 164 175 / 0); }
+}
+
+.mem-flash-write {
+  animation: mem-flash-write 1.8s ease-out forwards;
+  border-radius: 2px;
+}
+
 @keyframes disasm-flash {
   0% { background-color: rgb(253 224 71 / 0.85); }
   100% { background-color: rgb(253 224 71 / 0); }

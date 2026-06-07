@@ -12,6 +12,7 @@ import {
   stepMem,
   type BinaryItem,
   type CommitResult,
+  type MemAccess,
 } from './api'
 import {
   BINARY_NAME_KEY,
@@ -89,6 +90,9 @@ export default function App() {
   const [memRefresh, setMemRefresh] = useState(0)
   const [memJump, setMemJump] = useState<{ addr: string; seq: number } | null>(null)
   const [memHistory, setMemHistory] = useState<AccessEntry[]>(loadHistory)
+  const [memAccessFlash, setMemAccessFlash] = useState<
+    { seq: number; accesses: MemAccess[] } | null
+  >(null)
   const accessSeqRef = useRef(0)
   const stepCountRef = useRef(0)
 
@@ -110,6 +114,7 @@ export default function App() {
 
   function clearHistory() {
     setMemHistory([])
+    setMemAccessFlash(null)
     accessSeqRef.current = 0
     stepCountRef.current = 0
   }
@@ -218,6 +223,7 @@ export default function App() {
         step: stepNo,
       }))
       if (entries.length > 0) setMemHistory((cur) => [...entries.reverse(), ...cur])
+      setMemAccessFlash({ seq: stepNo, accesses })
       await updateDisplay()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -372,7 +378,12 @@ export default function App() {
         )}
 
         <div ref={memViewRef}>
-          <MemoryView hasSession={hasSession} refreshKey={memRefresh} jump={memJump} />
+          <MemoryView
+            hasSession={hasSession}
+            refreshKey={memRefresh}
+            jump={memJump}
+            accessFlash={memAccessFlash}
+          />
         </div>
 
         <AccessHistory

@@ -1,5 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
-import { apiFetchJson, setMemoryPageSize, writeMemory, type MemoryPage } from '../api'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  apiFetchJson,
+  setMemoryPageSize,
+  writeMemory,
+  type MemoryPage,
+  type MemAccess,
+} from '../api'
 import { MEM_ADDR_KEY, MEM_COLS_KEY, MEM_ROWS_KEY } from '../storage'
 
 function readCount(key: string, fallback: number): number {
@@ -19,10 +25,12 @@ export function MemoryView({
   hasSession,
   refreshKey,
   jump,
+  accessFlash,
 }: {
   hasSession: boolean
   refreshKey: number
   jump: { addr: string; seq: number } | null
+  accessFlash: { seq: number; accesses: MemAccess[] } | null
 }) {
   const [addrInput, setAddrInput] = useState(
     () => localStorage.getItem(MEM_ADDR_KEY) ?? '0x0',
@@ -205,6 +213,21 @@ export function MemoryView({
     }
   }
 
+  // Map each accessed byte from the last step to its kind, for color-coded flashing.
+  const accessMap = useMemo(() => {
+    const m = new Map<number, 'read' | 'write'>()
+    if (accessFlash) {
+      for (const a of accessFlash.accesses) {
+        const start = parseInt(a.addr, 16)
+        if (!Number.isFinite(start)) continue
+        const kind = a.type.toLowerCase().startsWith('w') ? 'write' : 'read'
+        for (let i = 0; i < a.width; i++) m.set(start + i, kind)
+      }
+    }
+    return m
+  }, [accessFlash])
+  const accessSeq = accessFlash?.seq
+
   const base = page ? parseInt(page.start, 16) : 0
   const gridRows: number[][] = []
   if (page) {
@@ -372,9 +395,15 @@ export function MemoryView({
                       )
                     }
                     const flash = flashByte !== null && base + idx === flashByte.addr
+                    const acc = accessMap.get(base + idx)
+                    const key = flash
+                      ? `${c}-j${flashByte.seq}`
+                      : acc
+                        ? `${c}-a${accessSeq}`
+                        : c
                     return (
                       <span
-                        key={flash ? `${c}-${flashByte.seq}` : c}
+                        key={key}
                         onClick={() => {
                           setEditDraft(hexByte(b))
                           setEditIdx(idx)
@@ -382,7 +411,15 @@ export function MemoryView({
                         title="click to edit byte"
                         className={
                           'px-0.5 rounded cursor-text hover:bg-gray-200 ' +
-                          (hot ? 'bg-yellow-300 text-gray-900' : flash ? 'reg-flash' : '')
+                          (hot
+                            ? 'bg-yellow-300 text-gray-900'
+                            : flash
+                              ? 'reg-flash'
+                              : acc === 'write'
+                                ? 'mem-flash-write'
+                                : acc === 'read'
+                                  ? 'mem-flash-read'
+                                  : '')
                         }
                       >
                         {hexByte(b)}
@@ -395,11 +432,25 @@ export function MemoryView({
                     const idx = r * cols + c
                     const hot = idx === highlightIdx
                     const flash = flashByte !== null && base + idx === flashByte.addr
+                    const acc = accessMap.get(base + idx)
+                    const key = flash
+                      ? `${c}-j${flashByte.seq}`
+                      : acc
+                        ? `${c}-a${accessSeq}`
+                        : c
                     return (
                       <span
-                        key={flash ? `${c}-${flashByte.seq}` : c}
+                        key={key}
                         className={
-                          hot ? 'bg-yellow-300 text-gray-900 rounded' : flash ? 'reg-flash' : ''
+                          hot
+                            ? 'bg-yellow-300 text-gray-900 rounded'
+                            : flash
+                              ? 'reg-flash'
+                              : acc === 'write'
+                                ? 'mem-flash-write'
+                                : acc === 'read'
+                                  ? 'mem-flash-read'
+                                  : ''
                         }
                       >
                         {ascii(b)}
