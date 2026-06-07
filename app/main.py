@@ -151,6 +151,15 @@ def step(session: Session = Depends(sessions.get)) -> str:
     return 'success'
 
 
+@api.post('/step-mem', tags=["Execution Control"])
+def step_mem(session: Session = Depends(sessions.get)) -> list[dict]:
+    """Step the machine and return a list of memory accesses"""
+    try:
+        return session.machine.step_mem()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @api.post('/run', tags=["Execution Control"])
 def run(steps: int, session: Session = Depends(sessions.get)) -> str:
     """Execute a specified number of instructions"""

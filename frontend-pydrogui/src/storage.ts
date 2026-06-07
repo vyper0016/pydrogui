@@ -8,6 +8,8 @@ export const DISASM_HEIGHT_KEY = 'pydrogui.disasm_height_px'
 export const MEM_ADDR_KEY = 'pydrogui.mem_addr'
 export const MEM_COLS_KEY = 'pydrogui.mem_cols'
 export const MEM_ROWS_KEY = 'pydrogui.mem_rows'
+export const MEM_HISTORY_KEY = 'pydrogui.mem_history'
+export const MEM_HISTORY_HEIGHT_KEY = 'pydrogui.mem_history_height_px'
 const DISASM_KEY_PREFIX = 'pydrogui.disasm.'
 
 export function loadCachedDisasm(binaryId: string): DisasmItem[] | null {

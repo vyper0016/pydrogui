@@ -34,3 +34,8 @@ class Machine:
     def set_mem_page_size(self, page_size: int) -> None:
         self.page_size = page_size
         log.info("page size set to %d bytes", self.page_size)
+        
+    def step_mem(self) -> list[dict]:
+        '''Step the machine and return a list of memory accesses'''
+        accessed = self._inner.step_monitor_mem()
+        return [{'type': type, 'addr': hex(addr), 'width': width, 'value': value} for type, addr, width, value in accessed]

@@ -11,6 +11,13 @@ export type MemoryPage = {
   step: number
 }
 
+export type MemAccess = {
+  type: string
+  addr: string
+  width: number
+  value: number
+}
+
 export type CommitResult =
   | { ok: true; changed: boolean }
   | { ok: false; error: string }
@@ -109,6 +116,10 @@ export async function apiFetch(path: string, method = 'GET'): Promise<string> {
 
 export async function setMemoryPageSize(pageSize: number): Promise<void> {
   await apiFetch(`/set-memory-page-size?page_size=${pageSize}`, 'POST')
+}
+
+export async function stepMem(): Promise<MemAccess[]> {
+  return apiFetchJson<MemAccess[]>('/step-mem', 'POST')
 }
 
 export async function apiFetchJson<T>(path: string, method = 'GET'): Promise<T> {

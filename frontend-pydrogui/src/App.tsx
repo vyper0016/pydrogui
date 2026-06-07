@@ -9,6 +9,7 @@ import {
   deleteSession,
   getSessionId,
   clearSessionState,
+  stepMem,
   type BinaryItem,
   type CommitResult,
 } from './api'
@@ -16,6 +17,7 @@ import {
   BINARY_NAME_KEY,
   BINARY_ID_KEY,
   NAME_MODE_KEY,
+  MEM_HISTORY_KEY,
   loadCachedDisasm,
   cacheDisasm,
   pruneDisasmCache,
@@ -36,7 +38,17 @@ import { BinaryPicker } from './components/BinaryPicker'
 import { ControlBar } from './components/ControlBar'
 import { DisasmView, type ScrollRequest } from './components/DisasmView'
 import { MemoryView } from './components/MemoryView'
+import { AccessHistory, type AccessEntry } from './components/AccessHistory'
 import { RegSidebar } from './components/RegSidebar'
+
+function loadHistory(): AccessEntry[] {
+  try {
+    const raw = localStorage.getItem(MEM_HISTORY_KEY)
+    return raw ? (JSON.parse(raw) as AccessEntry[]) : []
+  } catch {
+    return []
+  }
+}
 
 export default function App() {
   const [regs, setRegs] = useState<RegMap>({})
@@ -76,6 +88,31 @@ export default function App() {
   const [disasmLoading, setDisasmLoading] = useState(false)
   const [memRefresh, setMemRefresh] = useState(0)
   const [memJump, setMemJump] = useState<{ addr: string; seq: number } | null>(null)
+  const [memHistory, setMemHistory] = useState<AccessEntry[]>(loadHistory)
+  const accessSeqRef = useRef(0)
+  const stepCountRef = useRef(0)
+
+  useEffect(() => {
+    const max = memHistory.reduce((m, a) => Math.max(m, a.seq), 0)
+    const maxStep = memHistory.reduce((m, a) => Math.max(m, a.step), 0)
+    accessSeqRef.current = max
+    stepCountRef.current = maxStep
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(MEM_HISTORY_KEY, JSON.stringify(memHistory))
+    } catch {
+      // quota exceeded — keep in memory only
+    }
+  }, [memHistory])
+
+  function clearHistory() {
+    setMemHistory([])
+    accessSeqRef.current = 0
+    stepCountRef.current = 0
+  }
 
   function jumpToMemory(addr: string) {
     setMemJump((cur) => ({ addr, seq: (cur?.seq ?? 0) + 1 }))
@@ -169,8 +206,15 @@ export default function App() {
   async function step() {
     try {
       const snapshot = normalizePc(prevRegsRef.current.pc)
-      await apiFetch('/step', 'POST')
+      const accesses = await stepMem()
       setLastInstructionPc(snapshot)
+      const stepNo = (stepCountRef.current += 1)
+      const entries = accesses.map((a) => ({
+        ...a,
+        seq: (accessSeqRef.current += 1),
+        step: stepNo,
+      }))
+      if (entries.length > 0) setMemHistory((cur) => [...entries.reverse(), ...cur])
       await updateDisplay()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -209,6 +253,7 @@ export default function App() {
     setFlash({})
     flashSeqRef.current = 0
     prevRegsRef.current = {}
+    clearHistory()
     setLastInstructionPc(null)
     setScrollRequest(null)
     setLastInstr('')
@@ -323,6 +368,8 @@ export default function App() {
         )}
 
         <MemoryView hasSession={hasSession} refreshKey={memRefresh} jump={memJump} />
+
+        <AccessHistory history={memHistory} onClear={clearHistory} />
 
         {error && (
           <p className="mt-4 text-sm text-red-600">Error: {error}</p>
