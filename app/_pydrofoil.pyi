@@ -17,3 +17,6 @@ class RISCV64:
         
     def write_memory(self, address, value, width=8) -> None:
         ...
+        
+    def memory_info(self) -> list[tuple[int, int]]:
+        ...
