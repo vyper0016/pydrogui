@@ -10,8 +10,8 @@ class Machine:
     def __init__(self, binary_path: str, page_size: int = 16*16) -> None:
         self.binary_path = binary_path
         self.page_size = page_size # bytes per page
-        self.memory_ranges = self._inner.memory_info()
         self.reset()
+        self.memory_ranges = self._inner.memory_info()
 
     def reset(self) -> None:
         self._inner = RISCV64(self.binary_path, dtb=True)
@@ -20,6 +20,8 @@ class Machine:
 
     def __getattr__(self, name: str):
         # delegate everything else (read_register, step, run, ...) to RISCV64
+        if name == "_inner":
+            raise AttributeError(name)
         return getattr(self._inner, name)
 
     def clamp_address(self, addr: int) -> int:
