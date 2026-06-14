@@ -1,5 +1,58 @@
 @import "tailwindcss";
 
+/*
+ * Dark theme. Tailwind v4 utilities live in @layer utilities; these unlayered
+ * rules therefore win and remap the neutral utility classes the app uses,
+ * so components keep their light-mode class names. Toggled via `.dark` on <html>.
+ */
+html.dark {
+  background-color: #181818;
+  color: #d4d4d4;
+  color-scheme: dark;
+}
+html.dark body {
+  background-color: #181818;
+}
+
+/* Surfaces */
+.dark .bg-white { background-color: #1e1e1e; }
+.dark .bg-gray-50 { background-color: #202022; }
+.dark .bg-gray-100 { background-color: #2a2a2d; }
+.dark .bg-gray-500 { background-color: #52525b; }
+.dark .bg-gray-700 { background-color: #3f3f46; }
+
+/* Text */
+.dark .text-gray-900 { color: #e8e8e8; }
+.dark .text-gray-800 { color: #dcdcdc; }
+.dark .text-gray-700 { color: #cfcfcf; }
+.dark .text-gray-600 { color: #b4b4b4; }
+.dark .text-gray-500 { color: #9a9a9a; }
+.dark .text-gray-400 { color: #7c7c7c; }
+.dark .text-black { color: #e8e8e8; }
+
+/* Borders */
+.dark .border-gray-200 { border-color: #333338; }
+.dark .border-gray-300 { border-color: #3c3c42; }
+
+/* Hover states */
+.dark .hover\:bg-gray-50:hover { background-color: #202022; }
+.dark .hover\:bg-gray-100:hover { background-color: #2f2f33; }
+.dark .hover\:bg-gray-200:hover { background-color: #3a3a40; }
+.dark .hover\:bg-gray-600:hover { background-color: #52525b; }
+.dark .hover\:text-gray-700:hover { color: #cfcfcf; }
+
+/* Soften the light accent tints used for history rows / banners */
+.dark .bg-sky-50 { background-color: rgb(56 139 253 / 0.12); }
+.dark .bg-rose-50 { background-color: rgb(248 81 73 / 0.13); }
+.dark .bg-amber-50 { background-color: rgb(210 153 34 / 0.13); }
+.dark .bg-sky-200 { background-color: rgb(56 139 253 / 0.30); }
+.dark .bg-rose-200 { background-color: rgb(248 81 73 / 0.30); }
+
+/* Bright highlights keep dark text for readability even when their text
+   utility was remapped to a light color above. */
+.dark .bg-yellow-200,
+.dark .bg-yellow-300 { color: #1a1a1a; }
+
 @keyframes reg-flash {
   0% { background-color: rgb(254 240 138 / 0.9); }
   100% { background-color: rgb(254 240 138 / 0); }

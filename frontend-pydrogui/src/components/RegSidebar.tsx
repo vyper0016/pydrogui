@@ -10,6 +10,7 @@ import {
 } from '../regGroups'
 import { Section } from './Section'
 import { RegList } from './RegList'
+import { ThemeToggle } from './ThemeToggle'
 
 export function RegSidebar({
   regs,
@@ -30,7 +31,8 @@ export function RegSidebar({
   return (
     <aside className="space-y-3">
       <div className="flex items-center justify-end gap-1 text-xs">
-        <span className="text-gray-500 mr-1">names:</span>
+        <ThemeToggle />
+        <span className="text-gray-500 mr-1 ml-3">names:</span>
         <button
           onClick={() => onNameModeChange('reg')}
           className={
