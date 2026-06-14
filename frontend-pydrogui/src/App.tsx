@@ -93,7 +93,9 @@ export default function App() {
   const [disasm, setDisasm] = useState<DisasmItem[]>([])
   const [disasmLoading, setDisasmLoading] = useState(false)
   const [memRefresh, setMemRefresh] = useState(0)
-  const [memJump, setMemJump] = useState<{ addr: string; seq: number } | null>(null)
+  const [memJump, setMemJump] = useState<
+    { addr: string; seq: number; width: number; cls: string } | null
+  >(null)
   const [memHistory, setMemHistory] = useState<AccessEntry[]>(loadHistory)
   const [memAccessFlash, setMemAccessFlash] = useState<
     { seq: number; accesses: MemAccess[] } | null
@@ -151,8 +153,10 @@ export default function App() {
 
   const memViewRef = useRef<HTMLDivElement>(null)
 
-  function jumpToMemory(addr: string) {
-    setMemJump((cur) => ({ addr, seq: (cur?.seq ?? 0) + 1 }))
+  function jumpToMemory(addr: string, width = 1, cls = 'reg-flash') {
+    setMemJump((cur) => ({ addr, seq: (cur?.seq ?? 0) + 1, width, cls }))
+    // Drop the last step's access flash so its bytes don't re-animate on the freshly loaded page.
+    setMemAccessFlash(null)
     memViewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
   const inited = useRef(false)

@@ -29,7 +29,7 @@ export function MemoryView({
 }: {
   hasSession: boolean
   refreshKey: number
-  jump: { addr: string; seq: number } | null
+  jump: { addr: string; seq: number; width: number; cls: string } | null
   accessFlash: { seq: number; accesses: MemAccess[] } | null
 }) {
   const [addrInput, setAddrInput] = useState(
@@ -41,9 +41,9 @@ export function MemoryView({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [addrFocused, setAddrFocused] = useState(false)
-  // Byte to flash (jump = yellow, write ok = green, write error = red).
+  // Byte range to flash (jump = yellow/read/write color, write ok = green, write error = red).
   const [flashByte, setFlashByte] = useState<
-    { addr: number; seq: number; cls: string } | null
+    { addr: number; width: number; seq: number; cls: string } | null
   >(null)
   const flashSeqRef = useRef(0)
   // Inline single-byte edit: index into the current page, plus its draft hex.
@@ -137,7 +137,12 @@ export function MemoryView({
     setAddrInput(jump.addr)
     const target = parseInt(jump.addr, 16)
     if (Number.isFinite(target))
-      setFlashByte({ addr: target, seq: ++flashSeqRef.current, cls: 'reg-flash' })
+      setFlashByte({
+        addr: target,
+        width: Math.max(1, jump.width),
+        seq: ++flashSeqRef.current,
+        cls: jump.cls,
+      })
     load(jump.addr)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jump?.seq])
@@ -205,7 +210,7 @@ export function MemoryView({
     const parsed = parseInt(raw, 16)
     if (!Number.isFinite(parsed) || parsed < 0 || parsed > 0xff) {
       setEditIdx(null)
-      setFlashByte({ addr: base + idx, seq: ++flashSeqRef.current, cls: 'reg-flash-red' })
+      setFlashByte({ addr: base + idx, width: 1, seq: ++flashSeqRef.current, cls: 'reg-flash-red' })
       showInlineError(`Invalid byte: ${raw}`)
       return
     }
@@ -214,10 +219,10 @@ export function MemoryView({
       await writeMemory('0x' + (base + idx).toString(16), '0x' + parsed.toString(16), 1)
       setEditIdx(null)
       await load(page.start)
-      setFlashByte({ addr: base + idx, seq: ++flashSeqRef.current, cls: 'reg-flash-green' })
+      setFlashByte({ addr: base + idx, width: 1, seq: ++flashSeqRef.current, cls: 'reg-flash-green' })
     } catch (err) {
       setEditIdx(null)
-      setFlashByte({ addr: base + idx, seq: ++flashSeqRef.current, cls: 'reg-flash-red' })
+      setFlashByte({ addr: base + idx, width: 1, seq: ++flashSeqRef.current, cls: 'reg-flash-red' })
       showInlineError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
@@ -446,7 +451,10 @@ export function MemoryView({
                         />
                       )
                     }
-                    const flash = flashByte !== null && base + idx === flashByte.addr
+                    const flash =
+                      flashByte !== null &&
+                      base + idx >= flashByte.addr &&
+                      base + idx < flashByte.addr + flashByte.width
                     const acc = accessMap.get(base + idx)
                     const key = flash
                       ? `${c}-j${flashByte.seq}`
@@ -483,7 +491,10 @@ export function MemoryView({
                   {row.map((b, c) => {
                     const idx = r * cols + c
                     const hot = idx === highlightIdx
-                    const flash = flashByte !== null && base + idx === flashByte.addr
+                    const flash =
+                      flashByte !== null &&
+                      base + idx >= flashByte.addr &&
+                      base + idx < flashByte.addr + flashByte.width
                     const acc = accessMap.get(base + idx)
                     const key = flash
                       ? `${c}-j${flashByte.seq}`

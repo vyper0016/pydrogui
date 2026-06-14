@@ -15,7 +15,7 @@ export function AccessHistory({
 }: {
   history: AccessEntry[]
   onClear: () => void
-  onJumpToMemory: (addr: string) => void
+  onJumpToMemory: (addr: string, width: number, cls: string) => void
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
 
@@ -91,7 +91,13 @@ export function AccessHistory({
                   </span>
                   <span className="flex items-start gap-1 min-w-0">
                     <button
-                      onClick={() => onJumpToMemory(a.addr)}
+                      onClick={() =>
+                        onJumpToMemory(
+                          a.addr,
+                          a.width,
+                          write ? 'mem-flash-write' : 'mem-flash-read',
+                        )
+                      }
                       title="inspect this address in memory"
                       className="shrink-0 px-1 text-gray-400 hover:text-blue-600 hover:bg-gray-100 rounded cursor-pointer leading-none"
                     >
