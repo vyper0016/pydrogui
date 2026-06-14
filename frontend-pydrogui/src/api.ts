@@ -12,6 +12,7 @@ export type MemoryPage = {
 }
 
 export type MemAccess = {
+  step: number
   type: string
   addr: string
   width: number
@@ -120,6 +121,32 @@ export async function setMemoryPageSize(pageSize: number): Promise<void> {
 
 export async function stepMem(): Promise<MemAccess[]> {
   return apiFetchJson<MemAccess[]>('/step-mem', 'POST')
+}
+
+export async function run(steps: number): Promise<MemAccess[]> {
+  return apiFetchJson<MemAccess[]>(`/run?steps=${steps}`, 'POST')
+}
+
+export async function runUntilBreakpoint(): Promise<MemAccess[]> {
+  return apiFetchJson<MemAccess[]>('/run-until-breakpoint', 'POST')
+}
+
+export async function listBreakpoints(): Promise<number[]> {
+  return apiFetchJson<number[]>('/list-breakpoints')
+}
+
+export async function addBreakpoint(address: string): Promise<number[]> {
+  return apiFetchJson<number[]>(
+    `/add-breakpoint?address=${encodeURIComponent(address)}`,
+    'POST',
+  )
+}
+
+export async function removeBreakpoint(address: string): Promise<number[]> {
+  return apiFetchJson<number[]>(
+    `/remove-breakpoint?address=${encodeURIComponent(address)}`,
+    'POST',
+  )
 }
 
 export async function writeMemory(

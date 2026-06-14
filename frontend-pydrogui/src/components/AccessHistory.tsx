@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import type { MemAccess } from '../api'
 import { MEM_HISTORY_HEIGHT_KEY } from '../storage'
 
-export type AccessEntry = MemAccess & { seq: number; step: number }
+export type AccessEntry = MemAccess & { seq: number }
 
 function isWrite(type: string): boolean {
   return type.toLowerCase().startsWith('w')

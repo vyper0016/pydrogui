@@ -10,6 +10,11 @@ import {
   getSessionId,
   clearSessionState,
   stepMem,
+  run as runApi,
+  runUntilBreakpoint as runUntilBreakpointApi,
+  listBreakpoints,
+  addBreakpoint,
+  removeBreakpoint,
   type BinaryItem,
   type CommitResult,
   type MemAccess,
@@ -94,13 +99,12 @@ export default function App() {
     { seq: number; accesses: MemAccess[] } | null
   >(null)
   const accessSeqRef = useRef(0)
-  const stepCountRef = useRef(0)
+  const memFlashSeqRef = useRef(0)
+  const [breakpoints, setBreakpoints] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     const max = memHistory.reduce((m, a) => Math.max(m, a.seq), 0)
-    const maxStep = memHistory.reduce((m, a) => Math.max(m, a.step), 0)
     accessSeqRef.current = max
-    stepCountRef.current = maxStep
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -116,7 +120,33 @@ export default function App() {
     setMemHistory([])
     setMemAccessFlash(null)
     accessSeqRef.current = 0
-    stepCountRef.current = 0
+  }
+
+  // Normalize backend breakpoint addresses (ints) into the same hex form as disasm PCs.
+  function bpListToSet(addrs: number[]): Set<string> {
+    return new Set(addrs.map((a) => normalizePc('0x' + a.toString(16)) ?? '0x' + a.toString(16)))
+  }
+
+  // Prepend a batch of memory accesses to the history (newest first) and flash the touched bytes.
+  function recordAccesses(accesses: MemAccess[]) {
+    if (accesses.length === 0) return
+    const entries = accesses.map((a) => ({
+      ...a,
+      seq: (accessSeqRef.current += 1),
+    }))
+    setMemHistory((cur) => [...entries.reverse(), ...cur])
+    setMemAccessFlash({ seq: (memFlashSeqRef.current += 1), accesses })
+  }
+
+  async function toggleBreakpoint(pc: string) {
+    try {
+      const addrs = breakpoints.has(pc)
+        ? await removeBreakpoint(pc)
+        : await addBreakpoint(pc)
+      setBreakpoints(bpListToSet(addrs))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
   }
 
   const memViewRef = useRef<HTMLDivElement>(null)
@@ -216,14 +246,7 @@ export default function App() {
       const snapshot = normalizePc(prevRegsRef.current.pc)
       const accesses = await stepMem()
       setLastInstructionPc(snapshot)
-      const stepNo = (stepCountRef.current += 1)
-      const entries = accesses.map((a) => ({
-        ...a,
-        seq: (accessSeqRef.current += 1),
-        step: stepNo,
-      }))
-      if (entries.length > 0) setMemHistory((cur) => [...entries.reverse(), ...cur])
-      setMemAccessFlash({ seq: stepNo, accesses })
+      recordAccesses(accesses)
       await updateDisplay()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -232,8 +255,20 @@ export default function App() {
 
   async function run() {
     try {
-      await apiFetch(`/run?steps=${runSteps}`, 'POST')
+      const accesses = await runApi(runSteps)
       setLastInstructionPc(null)
+      recordAccesses(accesses)
+      await updateDisplay()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function runUntilBreakpoint() {
+    try {
+      const accesses = await runUntilBreakpointApi()
+      setLastInstructionPc(null)
+      recordAccesses(accesses)
       await updateDisplay()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -264,6 +299,7 @@ export default function App() {
     flashSeqRef.current = 0
     prevRegsRef.current = {}
     clearHistory()
+    setBreakpoints(new Set())
     setLastInstructionPc(null)
     setScrollRequest(null)
     setLastInstr('')
@@ -316,6 +352,9 @@ export default function App() {
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
     if (getSessionId()) {
       updateDisplay()
+      listBreakpoints()
+        .then((addrs) => setBreakpoints(bpListToSet(addrs)))
+        .catch(() => {})
       const bid = localStorage.getItem(BINARY_ID_KEY)
       if (bid) loadDisasm(bid)
       else pruneDisasmCache(null)
@@ -362,6 +401,7 @@ export default function App() {
           onRunStepsChange={setRunSteps}
           onStep={step}
           onRun={run}
+          onRunUntilBreakpoint={runUntilBreakpoint}
           onReset={reset}
           pcNormalized={pcNormalized}
           lastInstr={lastInstr}
@@ -374,7 +414,13 @@ export default function App() {
             Loading disassembly…
           </div>
         ) : (
-          <DisasmView items={disasm} pc={pcNormalized} scrollRequest={scrollRequest} />
+          <DisasmView
+            items={disasm}
+            pc={pcNormalized}
+            scrollRequest={scrollRequest}
+            breakpoints={breakpoints}
+            onToggleBreakpoint={toggleBreakpoint}
+          />
         )}
 
         <div ref={memViewRef}>

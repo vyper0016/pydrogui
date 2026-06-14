@@ -8,10 +8,14 @@ export function DisasmView({
   items,
   pc,
   scrollRequest,
+  breakpoints,
+  onToggleBreakpoint,
 }: {
   items: DisasmItem[]
   pc: string | null
   scrollRequest: ScrollRequest | null
+  breakpoints: Set<string>
+  onToggleBreakpoint: (pc: string) => void
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -91,7 +95,8 @@ export function DisasmView({
       className="relative resize-y overflow-hidden border border-gray-200 rounded bg-white h-[60vh] min-h-[160px] max-h-[90vh]"
     >
       <div ref={containerRef} className="font-mono text-xs overflow-auto h-full">
-        <div className="sticky top-0 z-10 grid grid-cols-[10ch_10ch_8ch_1fr] gap-3 px-3 py-1.5 bg-gray-100 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wide text-xs">
+        <div className="sticky top-0 z-10 grid grid-cols-[2ch_10ch_10ch_8ch_1fr] gap-3 px-3 py-1.5 bg-gray-100 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wide text-xs">
+          <span></span>
           <span>address</span>
           <span>bytes</span>
           <span>mnemonic</span>
@@ -113,18 +118,34 @@ export function DisasmView({
             )
           }
           const isActive = pc !== null && it.pc === pc
+          const isBreakpoint = breakpoints.has(it.pc)
           return (
             <div
               key={i}
               data-pc={it.pc}
               ref={isActive ? activeRef : undefined}
               className={
-                'grid grid-cols-[10ch_10ch_8ch_1fr] gap-3 px-3 py-0.5 ' +
+                'group grid grid-cols-[2ch_10ch_10ch_8ch_1fr] gap-3 px-3 py-0.5 ' +
                 (isActive
                   ? 'bg-yellow-200 text-gray-900'
                   : 'text-gray-800 hover:bg-gray-50')
               }
             >
+              <button
+                type="button"
+                onClick={() => onToggleBreakpoint(it.pc)}
+                title={isBreakpoint ? 'remove breakpoint' : 'set breakpoint'}
+                className="flex items-center justify-center cursor-pointer -ml-0.5"
+              >
+                <span
+                  className={
+                    'w-2.5 h-2.5 rounded-full ' +
+                    (isBreakpoint
+                      ? 'bg-red-600'
+                      : 'bg-red-400 opacity-0 group-hover:opacity-50 hover:!opacity-100')
+                  }
+                />
+              </button>
               <span className="text-gray-500">{it.pc}</span>
               <span className="text-gray-400">{it.bytes}</span>
               <span className="text-blue-700">{it.instruction}</span>

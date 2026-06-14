@@ -108,9 +108,7 @@ def str_to_int(s: str) -> int:
 @api.get('/read-register/{reg_name}', tags=["Registers"])
 def read_register(reg_name: str, session: Session = Depends(sessions.get)) -> str:
     try:
-        value = session.machine.read_register(reg_name)
-        value = hex(value.signed()) if isinstance(value, bitvector) else value
-        return str(value)
+        return session.machine.read_register(reg_name)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=f"{reg_name}: {e}")
     except Exception as e:
@@ -151,13 +149,6 @@ def write_memory(address: str, value: str, width: int = 8, session: Session = De
         return {'status': 'success'}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
-    
-@api.post('/step', tags=["Execution Control"])
-def step(session: Session = Depends(sessions.get)) -> str:
-    """Execute a single instruction"""
-    session.machine.step()
-    return 'success'
 
 
 @api.post('/step-mem', tags=["Execution Control"])
@@ -170,11 +161,51 @@ def step_mem(session: Session = Depends(sessions.get)) -> list[dict]:
 
 
 @api.post('/run', tags=["Execution Control"])
-def run(steps: int, session: Session = Depends(sessions.get)) -> str:
+def run(steps: int, session: Session = Depends(sessions.get)) -> list[dict]:
     """Execute a specified number of instructions"""
+    try:        
+        return session.machine.run_for_steps(steps)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@api.post('/run-until-breakpoint', tags=["Execution Control"])
+def run_until_breakpoint(session: Session = Depends(sessions.get)) -> list[dict]:
+    """Run the machine until a breakpoint is hit, and return a list of all memory accesses during the run."""
     try:
-        session.machine.run(steps)
-        return 'success'
+        return session.machine.run_until_breakpoint()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    
+@api.post('/add-breakpoint', tags=["Execution Control"])
+def add_breakpoint(address: str, session: Session = Depends(sessions.get)) -> list[int]:
+    try:        
+        session.machine.add_breakpoint(str_to_int(address))
+        return session.machine.list_breakpoints()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+
+@api.post('/remove-breakpoint', tags=["Execution Control"])
+def remove_breakpoint(address: str, session: Session = Depends(sessions.get)) -> list[int]:
+    try:        
+        session.machine.remove_breakpoint(str_to_int(address))
+        return session.machine.list_breakpoints()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@api.get('/list-breakpoints', tags=["Execution Control"])
+def list_breakpoints(session: Session = Depends(sessions.get)) -> list[int]:
+    return session.machine.list_breakpoints()
+
+
+@api.post('/reset-breakpoints', tags=["Execution Control"])
+def reset_breakpoints(session: Session = Depends(sessions.get)) -> list[int]:
+    try:
+        session.machine.reset_breakpoints()
+        return session.machine.list_breakpoints()
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

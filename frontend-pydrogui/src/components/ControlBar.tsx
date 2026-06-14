@@ -3,6 +3,7 @@ export function ControlBar({
   onRunStepsChange,
   onStep,
   onRun,
+  onRunUntilBreakpoint,
   onReset,
   pcNormalized,
   lastInstr,
@@ -13,6 +14,7 @@ export function ControlBar({
   onRunStepsChange: (n: number) => void
   onStep: () => void
   onRun: () => void
+  onRunUntilBreakpoint: () => void
   onReset: () => void
   pcNormalized: string | null
   lastInstr: string
@@ -39,6 +41,13 @@ export function ControlBar({
         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold rounded cursor-pointer text-sm"
       >
         Run N
+      </button>
+      <button
+        onClick={onRunUntilBreakpoint}
+        title="run until a breakpoint is hit"
+        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold rounded cursor-pointer text-sm"
+      >
+        Run to breakpoint
       </button>
       <button
         onClick={onReset}
