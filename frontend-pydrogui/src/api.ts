@@ -119,16 +119,20 @@ export async function setMemoryPageSize(pageSize: number): Promise<void> {
   await apiFetch(`/set-memory-page-size?page_size=${pageSize}`, 'POST')
 }
 
-export async function stepMem(): Promise<MemAccess[]> {
-  return apiFetchJson<MemAccess[]>('/step-mem', 'POST')
+export async function stepMem(): Promise<void> {
+  await apiFetch('/step-mem', 'POST')
 }
 
-export async function run(steps: number): Promise<MemAccess[]> {
-  return apiFetchJson<MemAccess[]>(`/run?steps=${steps}`, 'POST')
+export async function run(steps: number): Promise<void> {
+  await apiFetch(`/run?steps=${steps}`, 'POST')
 }
 
-export async function runUntilBreakpoint(): Promise<MemAccess[]> {
-  return apiFetchJson<MemAccess[]>('/run-until-breakpoint', 'POST')
+export async function runUntilBreakpoint(): Promise<void> {
+  await apiFetch('/run-until-breakpoint', 'POST')
+}
+
+export async function getMemoryHistory(): Promise<MemAccess[]> {
+  return apiFetchJson<MemAccess[]>('/memory-history')
 }
 
 export async function listBreakpoints(): Promise<number[]> {

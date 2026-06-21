@@ -12,6 +12,7 @@ import {
   stepMem,
   run as runApi,
   runUntilBreakpoint as runUntilBreakpointApi,
+  getMemoryHistory,
   listBreakpoints,
   addBreakpoint,
   removeBreakpoint,
@@ -23,7 +24,6 @@ import {
   BINARY_NAME_KEY,
   BINARY_ID_KEY,
   NAME_MODE_KEY,
-  MEM_HISTORY_KEY,
   loadCachedDisasm,
   cacheDisasm,
   pruneDisasmCache,
@@ -46,15 +46,6 @@ import { DisasmView, type ScrollRequest } from './components/DisasmView'
 import { MemoryView } from './components/MemoryView'
 import { AccessHistory, type AccessEntry } from './components/AccessHistory'
 import { RegSidebar } from './components/RegSidebar'
-
-function loadHistory(): AccessEntry[] {
-  try {
-    const raw = localStorage.getItem(MEM_HISTORY_KEY)
-    return raw ? (JSON.parse(raw) as AccessEntry[]) : []
-  } catch {
-    return []
-  }
-}
 
 export default function App() {
   const [regs, setRegs] = useState<RegMap>({})
@@ -96,32 +87,19 @@ export default function App() {
   const [memJump, setMemJump] = useState<
     { addr: string; seq: number; width: number; cls: string } | null
   >(null)
-  const [memHistory, setMemHistory] = useState<AccessEntry[]>(loadHistory)
+  const [memHistory, setMemHistory] = useState<AccessEntry[]>([])
   const [memAccessFlash, setMemAccessFlash] = useState<
     { seq: number; accesses: MemAccess[] } | null
   >(null)
-  const accessSeqRef = useRef(0)
+  // Highest backend step already seen, so a fresh fetch can flag the new accesses to flash.
+  const lastHistStepRef = useRef(-1)
   const memFlashSeqRef = useRef(0)
   const [breakpoints, setBreakpoints] = useState<Set<string>>(new Set())
-
-  useEffect(() => {
-    const max = memHistory.reduce((m, a) => Math.max(m, a.seq), 0)
-    accessSeqRef.current = max
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(MEM_HISTORY_KEY, JSON.stringify(memHistory))
-    } catch {
-      // quota exceeded — keep in memory only
-    }
-  }, [memHistory])
 
   function clearHistory() {
     setMemHistory([])
     setMemAccessFlash(null)
-    accessSeqRef.current = 0
+    lastHistStepRef.current = -1
   }
 
   // Normalize backend breakpoint addresses (ints) into the same hex form as disasm PCs.
@@ -129,15 +107,17 @@ export default function App() {
     return new Set(addrs.map((a) => normalizePc('0x' + a.toString(16)) ?? '0x' + a.toString(16)))
   }
 
-  // Prepend a batch of memory accesses to the history (newest first) and flash the touched bytes.
-  function recordAccesses(accesses: MemAccess[]) {
-    if (accesses.length === 0) return
-    const entries = accesses.map((a) => ({
-      ...a,
-      seq: (accessSeqRef.current += 1),
-    }))
-    setMemHistory((cur) => [...entries.reverse(), ...cur])
-    setMemAccessFlash({ seq: (memFlashSeqRef.current += 1), accesses })
+  // Pull the full access history from the backend, show it newest-first, and flash whatever is new.
+  async function refreshHistory() {
+    const history = await getMemoryHistory() // oldest-first
+    const fresh = history.filter((a) => a.step > lastHistStepRef.current)
+    if (history.length > 0) {
+      lastHistStepRef.current = history[history.length - 1].step
+    }
+    setMemHistory(history.map((a, i) => ({ ...a, seq: i })).reverse())
+    if (fresh.length > 0) {
+      setMemAccessFlash({ seq: (memFlashSeqRef.current += 1), accesses: fresh })
+    }
   }
 
   async function toggleBreakpoint(pc: string) {
@@ -248,9 +228,9 @@ export default function App() {
   async function step() {
     try {
       const snapshot = normalizePc(prevRegsRef.current.pc)
-      const accesses = await stepMem()
+      await stepMem()
       setLastInstructionPc(snapshot)
-      recordAccesses(accesses)
+      await refreshHistory()
       await updateDisplay()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -259,9 +239,9 @@ export default function App() {
 
   async function run() {
     try {
-      const accesses = await runApi(runSteps)
+      await runApi(runSteps)
       setLastInstructionPc(null)
-      recordAccesses(accesses)
+      await refreshHistory()
       await updateDisplay()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -270,9 +250,9 @@ export default function App() {
 
   async function runUntilBreakpoint() {
     try {
-      const accesses = await runUntilBreakpointApi()
+      await runUntilBreakpointApi()
       setLastInstructionPc(null)
-      recordAccesses(accesses)
+      await refreshHistory()
       await updateDisplay()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -356,6 +336,7 @@ export default function App() {
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
     if (getSessionId()) {
       updateDisplay()
+      refreshHistory().catch(() => {})
       listBreakpoints()
         .then((addrs) => setBreakpoints(bpListToSet(addrs)))
         .catch(() => {})

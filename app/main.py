@@ -151,8 +151,13 @@ def write_memory(address: str, value: str, width: int = 8, session: Session = De
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@api.get('/memory-history', tags=["Memory"])
+def get_memory_history(session: Session = Depends(sessions.get)) -> list[dict]:
+    return session.machine.memory_history
+
+
 @api.post('/step-mem', tags=["Execution Control"])
-def step_mem(session: Session = Depends(sessions.get)) -> list[dict]:
+def step_mem(session: Session = Depends(sessions.get)) -> None:
     """Step the machine and return a list of memory accesses"""
     try:
         return session.machine.step_mem()
@@ -161,7 +166,7 @@ def step_mem(session: Session = Depends(sessions.get)) -> list[dict]:
 
 
 @api.post('/run', tags=["Execution Control"])
-def run(steps: int, session: Session = Depends(sessions.get)) -> list[dict]:
+def run(steps: int, session: Session = Depends(sessions.get)) -> None:
     """Execute a specified number of instructions"""
     try:        
         return session.machine.run_for_steps(steps)
@@ -170,7 +175,7 @@ def run(steps: int, session: Session = Depends(sessions.get)) -> list[dict]:
 
 
 @api.post('/run-until-breakpoint', tags=["Execution Control"])
-def run_until_breakpoint(session: Session = Depends(sessions.get)) -> list[dict]:
+def run_until_breakpoint(session: Session = Depends(sessions.get)) -> None:
     """Run the machine until a breakpoint is hit, and return a list of all memory accesses during the run."""
     try:
         return session.machine.run_until_breakpoint()
