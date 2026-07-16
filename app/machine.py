@@ -1,6 +1,8 @@
 
 from _pydrofoil import RISCV64, bitvector
 import logging
+import os
+import tempfile
 
 log = logging.getLogger(__name__)
 log.setLevel(logging.DEBUG)
@@ -12,16 +14,30 @@ class Machine:
     def __init__(self, binary_path: str, page_size: int = 16*16) -> None:
         self.binary_path = binary_path
         self.page_size = page_size # bytes per page
+        self.term_file = None
         self.reset()
         self.memory_ranges = self._inner.memory_info()
         self.breakpoints = set()
 
     def reset(self) -> None:
+        self.close_term()
+        self.term_file = tempfile.TemporaryFile()
         self._inner = RISCV64(self.binary_path, dtb=True)
         self._inner.set_verbosity(0)
+        self._inner.set_term_fd(self.term_file.fileno())
         self.step_count = 0
         self.memory_history = []
         log.info(f"machine reset binary_path={self.binary_path}")
+
+    def read_term(self, offset: int = 0) -> dict:
+        '''Return terminal output from a byte offset, plus the offset to ask for next time.'''
+        data = os.pread(self.term_file.fileno(), 1 << 20, offset)
+        return {'data': data.decode('utf-8', errors='replace'), 'next_offset': offset + len(data)}
+
+    def close_term(self) -> None:
+        if self.term_file is not None:
+            self.term_file.close()
+            self.term_file = None
 
     def __getattr__(self, name: str):
         # delegate everything else (read_register, step, run, ...) to RISCV64

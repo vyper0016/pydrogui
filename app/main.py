@@ -156,6 +156,12 @@ def get_memory_history(session: Session = Depends(sessions.get)) -> list[dict]:
     return session.machine.memory_history
 
 
+@api.get('/read-term', tags=["Memory"])
+def read_term(offset: int = 0, session: Session = Depends(sessions.get)) -> dict:
+    """Read terminal output written by the guest, starting at a byte offset."""
+    return session.machine.read_term(offset)
+
+
 @api.post('/step-mem', tags=["Execution Control"])
 def step_mem(session: Session = Depends(sessions.get)) -> None:
     """Step the machine and return a list of memory accesses"""

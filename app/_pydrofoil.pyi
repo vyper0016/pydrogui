@@ -20,3 +20,6 @@ class RISCV64:
         
     def memory_info(self) -> list[tuple[int, int]]:
         ...
+        
+    def set_term_fd(self, descriptor):
+        ...

@@ -36,6 +36,7 @@ _lock = threading.Lock()
 def _pop(sid: str) -> Session | None:
     s = _sessions.pop(sid, None)
     if s is not None:
+        s.machine.close_term()
         binaries.delete_upload(s.binary_id)
     return s
 
