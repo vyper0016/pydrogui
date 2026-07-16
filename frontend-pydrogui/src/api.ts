@@ -19,6 +19,11 @@ export type MemAccess = {
   value: number
 }
 
+export type TermChunk = {
+  data: string
+  next_offset: number
+}
+
 export type CommitResult =
   | { ok: true; changed: boolean }
   | { ok: false; error: string }
@@ -133,6 +138,10 @@ export async function runUntilBreakpoint(): Promise<void> {
 
 export async function getMemoryHistory(): Promise<MemAccess[]> {
   return apiFetchJson<MemAccess[]>('/memory-history')
+}
+
+export async function readTerm(offset: number): Promise<TermChunk> {
+  return apiFetchJson<TermChunk>(`/read-term?offset=${offset}`)
 }
 
 export async function listBreakpoints(): Promise<number[]> {

@@ -13,6 +13,7 @@ import {
   run as runApi,
   runUntilBreakpoint as runUntilBreakpointApi,
   getMemoryHistory,
+  readTerm,
   listBreakpoints,
   addBreakpoint,
   removeBreakpoint,
@@ -45,6 +46,7 @@ import { ControlBar } from './components/ControlBar'
 import { DisasmView, type ScrollRequest } from './components/DisasmView'
 import { MemoryView } from './components/MemoryView'
 import { AccessHistory, type AccessEntry } from './components/AccessHistory'
+import { TermView } from './components/TermView'
 import { RegSidebar } from './components/RegSidebar'
 
 export default function App() {
@@ -95,6 +97,19 @@ export default function App() {
   const lastHistStepRef = useRef(-1)
   const memFlashSeqRef = useRef(0)
   const [breakpoints, setBreakpoints] = useState<Set<string>>(new Set())
+  const [term, setTerm] = useState('')
+  // Byte offset the next terminal read starts at; the backend hands it back on every read.
+  const termOffsetRef = useRef(0)
+
+  function clearTerm() {
+    setTerm('')
+  }
+
+  // The machine's terminal is a fresh file after a reset, so start reading from the top again.
+  function resetTerm() {
+    setTerm('')
+    termOffsetRef.current = 0
+  }
 
   function clearHistory() {
     setMemHistory([])
@@ -203,10 +218,13 @@ export default function App() {
 
   async function updateDisplay() {
     try {
-      const [regMap, instVal] = await Promise.all([
+      const [regMap, instVal, termChunk] = await Promise.all([
         apiFetchJson<RegMap>(READ_ALL_REGS_URL),
         apiFetchJson<string>('/disassemble-last-instruction'),
+        readTerm(termOffsetRef.current),
       ])
+      termOffsetRef.current = termChunk.next_offset
+      if (termChunk.data) setTerm((cur) => cur + termChunk.data)
       const prev = prevRegsRef.current
       const yellowUpdates: Array<{ reg: string; kind: FlashKind }> = []
       for (const k of Object.keys(regMap)) {
@@ -264,6 +282,7 @@ export default function App() {
       await apiFetch('/reset', 'POST')
       setLastInstructionPc(null)
       clearHistory()
+      resetTerm()
       await updateDisplay()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -283,6 +302,7 @@ export default function App() {
     flashSeqRef.current = 0
     prevRegsRef.current = {}
     clearHistory()
+    resetTerm()
     setBreakpoints(new Set())
     setLastInstructionPc(null)
     setScrollRequest(null)
@@ -422,6 +442,8 @@ export default function App() {
           onClear={clearHistory}
           onJumpToMemory={jumpToMemory}
         />
+
+        <TermView text={term} onClear={clearTerm} />
 
         {error && (
           <p className="mt-4 text-sm text-red-600">Error: {error}</p>
