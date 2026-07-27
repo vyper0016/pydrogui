@@ -11,7 +11,6 @@ import {
   clearSessionState,
   stepMem,
   run as runApi,
-  runUntilBreakpoint as runUntilBreakpointApi,
   getMemoryHistory,
   readTerm,
   listBreakpoints,
@@ -48,6 +47,10 @@ import { MemoryView } from './components/MemoryView'
 import { AccessHistory, type AccessEntry } from './components/AccessHistory'
 import { TermView } from './components/TermView'
 import { RegSidebar } from './components/RegSidebar'
+
+// Default delay between auto-steps while running to a breakpoint, so an unhit breakpoint
+// doesn't spin the UI/backend at full speed and the run stays cancelable. User-adjustable.
+const DEFAULT_AUTO_STEP_DELAY_MS = 150
 
 export default function App() {
   const [regs, setRegs] = useState<RegMap>({})
@@ -97,6 +100,10 @@ export default function App() {
   const lastHistStepRef = useRef(-1)
   const memFlashSeqRef = useRef(0)
   const [breakpoints, setBreakpoints] = useState<Set<string>>(new Set())
+  const breakpointsRef = useRef<Set<string>>(new Set())
+  const [autoRunning, setAutoRunning] = useState(false)
+  const autoRunStopRef = useRef(false)
+  const [autoStepDelayMs, setAutoStepDelayMs] = useState(DEFAULT_AUTO_STEP_DELAY_MS)
   const [term, setTerm] = useState('')
   // Byte offset the next terminal read starts at; the backend hands it back on every read.
   const termOffsetRef = useRef(0)
@@ -160,6 +167,15 @@ export default function App() {
     localStorage.setItem(NAME_MODE_KEY, nameMode)
   }, [nameMode])
 
+  useEffect(() => {
+    breakpointsRef.current = breakpoints
+  }, [breakpoints])
+
+  const autoStepDelayRef = useRef(autoStepDelayMs)
+  useEffect(() => {
+    autoStepDelayRef.current = autoStepDelayMs
+  }, [autoStepDelayMs])
+
   const pcNormalized = normalizePc(regs.pc)
 
   const disasmPcs = useMemo(() => {
@@ -216,7 +232,7 @@ export default function App() {
     }
   }
 
-  async function updateDisplay() {
+  async function updateDisplay(): Promise<RegMap | null> {
     try {
       const [regMap, instVal, termChunk] = await Promise.all([
         apiFetchJson<RegMap>(READ_ALL_REGS_URL),
@@ -238,8 +254,10 @@ export default function App() {
       setLastInstr(instVal)
       setMemRefresh((n) => n + 1)
       setError('')
+      return regMap
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      return null
     }
   }
 
@@ -266,14 +284,34 @@ export default function App() {
     }
   }
 
+  // Backend run-until-breakpoint blocks forever server-side if no breakpoint is ever hit,
+  // so drive it here instead: step one instruction at a time with a delay, checking pc
+  // against the breakpoint set after each step, and allow the user to cancel mid-run.
   async function runUntilBreakpoint() {
+    if (autoRunning) {
+      autoRunStopRef.current = true
+      return
+    }
+    autoRunStopRef.current = false
+    setAutoRunning(true)
     try {
-      await runUntilBreakpointApi()
       setLastInstructionPc(null)
-      await refreshHistory()
-      await updateDisplay()
+      while (!autoRunStopRef.current) {
+        const snapshot = normalizePc(prevRegsRef.current.pc)
+        await stepMem()
+        setLastInstructionPc(snapshot)
+        await refreshHistory()
+        const regMap = await updateDisplay()
+        const pc = normalizePc(regMap?.pc)
+        if (pc && breakpointsRef.current.has(pc)) break
+        if (autoRunStopRef.current) break
+        await new Promise((resolve) => setTimeout(resolve, autoStepDelayRef.current))
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAutoRunning(false)
+      autoRunStopRef.current = false
     }
   }
 
@@ -412,6 +450,9 @@ export default function App() {
           lastInstr={lastInstr}
           canScrollLast={canScrollLast}
           onScrollToLast={handleScrollToLast}
+          autoRunning={autoRunning}
+          autoStepDelayMs={autoStepDelayMs}
+          onAutoStepDelayChange={setAutoStepDelayMs}
         />
 
         {disasmLoading ? (
