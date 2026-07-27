@@ -16,6 +16,7 @@ import {
   listBreakpoints,
   addBreakpoint,
   removeBreakpoint,
+  resetBreakpoints,
   type BinaryItem,
   type CommitResult,
   type MemAccess,
@@ -147,6 +148,15 @@ export default function App() {
       const addrs = breakpoints.has(pc)
         ? await removeBreakpoint(pc)
         : await addBreakpoint(pc)
+      setBreakpoints(bpListToSet(addrs))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function clearBreakpoints() {
+    try {
+      const addrs = await resetBreakpoints()
       setBreakpoints(bpListToSet(addrs))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -466,6 +476,7 @@ export default function App() {
             scrollRequest={scrollRequest}
             breakpoints={breakpoints}
             onToggleBreakpoint={toggleBreakpoint}
+            onClearBreakpoints={clearBreakpoints}
           />
         )}
 

@@ -10,12 +10,14 @@ export function DisasmView({
   scrollRequest,
   breakpoints,
   onToggleBreakpoint,
+  onClearBreakpoints,
 }: {
   items: DisasmItem[]
   pc: string | null
   scrollRequest: ScrollRequest | null
   breakpoints: Set<string>
   onToggleBreakpoint: (pc: string) => void
+  onClearBreakpoints: () => void
 }) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -96,7 +98,14 @@ export function DisasmView({
     >
       <div ref={containerRef} className="font-mono text-xs overflow-auto h-full">
         <div className="sticky top-0 z-10 grid grid-cols-[2ch_10ch_10ch_8ch_1fr] gap-3 px-3 py-1.5 bg-gray-100 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wide text-xs">
-          <span></span>
+          <button
+            type="button"
+            onClick={onClearBreakpoints}
+            title="clear all breakpoints"
+            className="flex items-center justify-center w-3.5 h-3.5 rounded-full border border-gray-400 text-gray-500 hover:border-red-500 hover:text-red-500 cursor-pointer normal-case leading-none"
+          >
+            ×
+          </button>
           <span>address</span>
           <span>bytes</span>
           <span>mnemonic</span>

@@ -162,6 +162,10 @@ export async function removeBreakpoint(address: string): Promise<number[]> {
   )
 }
 
+export async function resetBreakpoints(): Promise<number[]> {
+  return apiFetchJson<number[]>('/reset-breakpoints', 'POST')
+}
+
 export async function writeMemory(
   address: string,
   value: string,
