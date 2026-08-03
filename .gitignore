@@ -45,3 +45,5 @@ samples/
 
 test_commands.txt
 app/gr.py
+app/bench_results.json
+app/bench_results.html
