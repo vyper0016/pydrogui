@@ -1,6 +1,6 @@
 '''
-L0 step_monitor_mem
-L1 machine.step_mem
+L0 run
+L1 machine.run_for_steps
 L2 /api/step-mem
 L3 /api/step-mem remote
 '''
@@ -14,7 +14,7 @@ from typing import Callable
 
 #/pypy/pypy-pydrofoil-scripting-experimental/bin/pypy /app/bench.py
 
-BATCH_SIZES = [1, 100, 100_000, 200_000, 1_500_000][:-2]
+BATCH_SIZES = [1, 100, 100_000, 200_000, 1_500_000]
 LINUX_BINARY = '/app/static/binary_examples/linux_kernel.bbl'
 LINUX_BINARY_ID = "example:linux_kernel.bbl"
 SAMPLE_SIZE = 3
