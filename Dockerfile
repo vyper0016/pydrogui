@@ -21,6 +21,7 @@ RUN /pypy/pypy-pydrofoil-scripting-experimental/bin/pypy -m ensurepip --default-
 	&& /pypy/pypy-pydrofoil-scripting-experimental/bin/pypy -m pip install --upgrade pip \
 	&& /pypy/pypy-pydrofoil-scripting-experimental/bin/pypy -m pip install -r /app/requirements.txt
 
+COPY app/ /app/
 COPY --from=frontend-build /frontend/dist /frontend-dist
 
 CMD ["/pypy/pypy-pydrofoil-scripting-experimental/bin/pypy", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
