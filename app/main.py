@@ -4,7 +4,7 @@ from typing import List
 
 import fastapi
 from fastapi import APIRouter, HTTPException, Query, Depends, UploadFile, File
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from _pydrofoil import bitvector
 import sessions
@@ -77,11 +77,10 @@ def hello() -> str:
 
 
 @api.get('/bench', tags=["Benchmarks"])
-def run_bench(sample_size: int = 5) -> HTMLResponse:
+def run_bench(sample_size: int = 5) -> dict:
     try:
         import bench
-        html = bench.run_benchs(sample_size=sample_size)
-        return HTMLResponse(content=html)
+        return bench.run_benchs(sample_size=sample_size)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
