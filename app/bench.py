@@ -184,13 +184,15 @@ def run_benchs(sample_size:int = 5) -> dict:
     
 if __name__ == "__main__":
     REMOTE_API_URL = "https://pydrogui.onrender.com/api"
+    SAMPLE_SIZE = 5
+    
     # get the bench results for L0-2 as json from remote API
     print('fetching remote bench results')
-    r = requests.get(f"{REMOTE_API_URL}/bench")
+    r = requests.get(f"{REMOTE_API_URL}/bench?sample_size={SAMPLE_SIZE}")
     r.raise_for_status()
     results = r.json()
     print('remote bench results fetched')
-    results['L3'] = bench_23(REMOTE_API_URL, sample_size=5)  # run L3 locally
+    results['L3'] = bench_23(REMOTE_API_URL, sample_size=SAMPLE_SIZE)  # run L3 locally
     
     # Compare each layer with the previous layers
     results['differences'] = {}
@@ -206,6 +208,9 @@ if __name__ == "__main__":
                 diff = results[layer][i]['median'] - results[other_layer][i]['median']
                 differences.append({str(batch_size):  _round(diff)})
             results['differences'][f"{layer} - {other_layer}"] = differences
-            
+    
+    with open("bench_results.json", "w") as f:
+        json.dump(results, f, indent=2)        
+    
     generate_report("bench_results.json")
     print('report generated')
