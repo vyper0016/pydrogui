@@ -70,7 +70,9 @@ def bench_23(api_url:str, sample_size:int = 5) -> list:
             cleanup_l23(api_url, sid)
         batch_results["median"] = _round(statistics.median(batch_results["times"]))
         batch_results["mean"] = _round(statistics.mean(batch_results["times"]))
-        batch_results['variance'] = _round(statistics.variance(batch_results["times"]))
+        batch_results['variance'] = 0
+        if len(batch_results["times"]) > 1:
+            batch_results['variance'] = _round(statistics.variance(batch_results["times"]))
         results.append(batch_results)
 
     return results
@@ -89,7 +91,9 @@ def bench_01(init_func:Callable, inner_func:Callable, sample_size:int = 5) -> li
                 batch_results["times"].append(_round(elapsed_time))
         batch_results["median"] = _round(statistics.median(batch_results["times"]))
         batch_results["mean"] = _round(statistics.mean(batch_results["times"]))
-        batch_results['variance'] = _round(statistics.variance(batch_results["times"]))
+        batch_results['variance'] = 0
+        if len(batch_results["times"]) > 1:
+            batch_results['variance'] = _round(statistics.variance(batch_results["times"]))
         results.append(batch_results)
 
     return results
