@@ -77,10 +77,10 @@ def hello() -> str:
 
 
 @api.get('/bench', tags=["Benchmarks"])
-def run_bench() -> HTMLResponse:
+def run_bench(sample_size: int = 5) -> HTMLResponse:
     try:
         import bench
-        html = bench.run_benchs()
+        html = bench.run_benchs(sample_size=sample_size)
         return HTMLResponse(content=html)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

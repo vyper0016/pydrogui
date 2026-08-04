@@ -18,7 +18,6 @@ from typing import Callable
 BATCH_SIZES = [1, 100, 100_000, 200_000, 1_500_000]
 LINUX_BINARY = '/app/static/binary_examples/linux_kernel.bbl'
 LINUX_BINARY_ID = "example:linux_kernel.bbl"
-SAMPLE_SIZE = int(os.getenv("BENCH_SAMPLE_SIZE", "5"))
 ROUNDING = 5
 ROUND = True
 
@@ -52,7 +51,7 @@ def cleanup_l23(api_url:str, sid:str):
     r = requests.delete(f"{api_url}/sessions/{sid}")
     r.raise_for_status()
 
-def bench_23(api_url:str) -> list:
+def bench_23(api_url:str, sample_size:int = 5) -> list:
     # test api call
     r = requests.get(f"{api_url}/binaries/examples")
     r.raise_for_status()
@@ -60,7 +59,7 @@ def bench_23(api_url:str) -> list:
     results = []
     for batch_size in BATCH_SIZES:
         batch_results = {"batch_size": batch_size, "times": []}
-        for i in range(SAMPLE_SIZE+1):
+        for i in range(sample_size+1):
             sid = init_l23(api_url)
             start = time.perf_counter()
             r = requests.post(f"{api_url}/run?steps={batch_size}", headers={"X-Session-Id": sid})
@@ -76,11 +75,11 @@ def bench_23(api_url:str) -> list:
 
     return results
 
-def bench_01(init_func:Callable, inner_func:Callable) -> list:
+def bench_01(init_func:Callable, inner_func:Callable, sample_size:int = 5) -> list:
     results = []
     for batch_size in BATCH_SIZES:
         batch_results = {"batch_size": batch_size, "times": []}
-        for i in range(SAMPLE_SIZE):
+        for i in range(sample_size):
             machine = init_func()
             start_time = time.perf_counter()
             inner_func(machine, batch_size)
@@ -165,17 +164,34 @@ def generate_report(results_path: str = "bench_results.json") -> str:
     print("report written to bench_results.html")
     return html
 
-def run_benchs():
-
+def run_benchs(sample_size:int = 5) -> dict:
     results = {}
-    results["L0"] = bench_01(init_l0, inner_l0)
-    results["L1"] = bench_01(init_l1, inner_l1)
-    results["L2"] = bench_23("http://localhost:8000/api")
-    results["L3"] = bench_23("https://pydrogui.onrender.com/api")
+    results["L0"] = bench_01(init_l0, inner_l0, sample_size)
+    results["L1"] = bench_01(init_l1, inner_l1, sample_size)
+    results["L2"] = bench_23("http://localhost:8000/api", sample_size)
+    #L3 is seperate, run locally
+
+    print('benchmark done')
+    with open("bench_results.json", "w") as f:
+        json.dump(results, f, indent=2)
+
+    return results
+    
+    
+if __name__ == "__main__":
+    REMOTE_API_URL = "https://pydrogui.onrender.com/api"
+    # get the bench results for L0-2 as json from remote API
+    print('fetching remote bench results')
+    r = requests.get(f"{REMOTE_API_URL}/bench")
+    r.raise_for_status()
+    results = r.json()
+    print('remote bench results fetched')
+    results['L3'] = bench_23(REMOTE_API_URL, sample_size=5)  # run L3 locally
+    
+    # Compare each layer with the previous layers
     results['differences'] = {}
     layers = ['L0', 'L1', 'L2', 'L3']
 
-    # Compare each layer with the previous layers
     for n, layer in enumerate(layers[1:], start=1):
         for other_layer in layers[:n]:
             differences = []
@@ -186,13 +202,6 @@ def run_benchs():
                 diff = results[layer][i]['median'] - results[other_layer][i]['median']
                 differences.append({str(batch_size):  _round(diff)})
             results['differences'][f"{layer} - {other_layer}"] = differences
-
-    print('benchmark done')
-    with open("bench_results.json", "w") as f:
-        json.dump(results, f, indent=2)
-
-    return generate_report("bench_results.json")
-    
-    
-if __name__ == "__main__":
-    run_benchs()
+            
+    generate_report("bench_results.json")
+    print('report generated')
