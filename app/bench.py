@@ -17,7 +17,7 @@ from typing import Callable
 BATCH_SIZES = [1, 100, 100_000, 200_000, 1_500_000]
 LINUX_BINARY = '/app/static/binary_examples/linux_kernel.bbl'
 LINUX_BINARY_ID = "example:linux_kernel.bbl"
-SAMPLE_SIZE = 3
+SAMPLE_SIZE = 10
 ROUNDING = 5
 ROUND = True
 
@@ -161,15 +161,15 @@ def generate_report(results_path: str = "bench_results.json") -> str:
         f.write(html)
 
     print("report written to bench_results.html")
+    return html
 
-
-if __name__ == "__main__":
+def run_benchs():
 
     results = {}
     results["L0"] = bench_01(init_l0, inner_l0)
     results["L1"] = bench_01(init_l1, inner_l1)
     results["L2"] = bench_23("http://localhost:8000/api")
-    results["L3"] = bench_23("http://localhost:8000/api") # TODO: change to remote server
+    results["L3"] = bench_23("https://pydrogui.onrender.com/api")
     results['differences'] = {}
     layers = ['L0', 'L1', 'L2', 'L3']
 
@@ -189,4 +189,8 @@ if __name__ == "__main__":
     with open("bench_results.json", "w") as f:
         json.dump(results, f, indent=2)
 
-    generate_report("bench_results.json")
+    return generate_report("bench_results.json")
+    
+    
+if __name__ == "__main__":
+    run_benchs()

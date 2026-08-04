@@ -4,7 +4,7 @@ from typing import List
 
 import fastapi
 from fastapi import APIRouter, HTTPException, Query, Depends, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from _pydrofoil import bitvector
 import sessions
@@ -74,6 +74,16 @@ def test_page() -> FileResponse:
 @api.get('/hello')
 def hello() -> str:
     return 'Hello, world!'
+
+
+@api.get('/bench', tags=["Benchmarks"])
+def run_bench() -> HTMLResponse:
+    try:
+        import bench
+        html = bench.run_benchs()
+        return HTMLResponse(content=html)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @api.get('/disassemble-last-instruction', tags=["Execution Control"])
