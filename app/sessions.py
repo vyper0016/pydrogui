@@ -2,6 +2,7 @@ import logging
 import time
 import uuid
 import threading
+import os
 
 from fastapi import HTTPException, Header
 
@@ -9,6 +10,8 @@ import binaries
 from machine import Machine
 
 SESSION_TTL_SECONDS = 30 * 60
+
+MAX_SESSIONS = int(os.getenv("MAX_SESSIONS", "10"))
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +41,7 @@ def _pop(sid: str) -> Session | None:
     if s is not None:
         s.machine.close_term()
         binaries.delete_upload(s.binary_id)
+        del s.machine
     return s
 
 
@@ -54,6 +58,11 @@ def create(binary_id: str) -> str:
     sid = uuid.uuid4().hex
     with _lock:
         _purge_expired(time.monotonic())
+        
+        if len(_sessions) >= MAX_SESSIONS:
+            log.warning("session create rejected - max sessions reached (%d)", MAX_SESSIONS)
+            raise HTTPException(status_code=503, detail="Too many active sessions")
+        
         _sessions[sid] = Session(binary_id)
         active = len(_sessions)
     log.info("session created sid=%s binary_id=%s active=%d", sid, binary_id, active)

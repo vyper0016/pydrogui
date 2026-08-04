@@ -7,6 +7,7 @@ L3 /api/step-mem remote
 import time
 import requests
 import json
+import os
 from _pydrofoil import RISCV64
 from machine import Machine
 import statistics
@@ -17,7 +18,7 @@ from typing import Callable
 BATCH_SIZES = [1, 100, 100_000, 200_000, 1_500_000]
 LINUX_BINARY = '/app/static/binary_examples/linux_kernel.bbl'
 LINUX_BINARY_ID = "example:linux_kernel.bbl"
-SAMPLE_SIZE = 10
+SAMPLE_SIZE = int(os.getenv("BENCH_SAMPLE_SIZE", "5"))
 ROUNDING = 5
 ROUND = True
 
@@ -84,6 +85,7 @@ def bench_01(init_func:Callable, inner_func:Callable) -> list:
             start_time = time.perf_counter()
             inner_func(machine, batch_size)
             elapsed_time = time.perf_counter() - start_time
+            del machine
             if i > 0:  # Skip the first run for warm-up
                 batch_results["times"].append(_round(elapsed_time))
         batch_results["median"] = _round(statistics.median(batch_results["times"]))
