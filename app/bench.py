@@ -79,7 +79,7 @@ def bench_01(init_func:Callable, inner_func:Callable, sample_size:int = 5) -> li
     results = []
     for batch_size in BATCH_SIZES:
         batch_results = {"batch_size": batch_size, "times": []}
-        for i in range(sample_size):
+        for i in range(sample_size+1):
             machine = init_func()
             start_time = time.perf_counter()
             inner_func(machine, batch_size)
