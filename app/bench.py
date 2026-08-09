@@ -12,6 +12,7 @@ from _pydrofoil import RISCV64
 from machine import Machine
 import statistics
 from typing import Callable
+import bench_env
 
 #/pypy/pypy-pydrofoil-scripting-experimental/bin/pypy /app/bench.py
 
@@ -103,7 +104,8 @@ def generate_report(results_path: str = "bench_results.json") -> str:
     with open(results_path) as f:
         data = json.load(f)
 
-    layers = [k for k in data if k != "differences"]
+    # layer entries are lists of batch results; "env" and "differences" are not
+    layers = [k for k in data if isinstance(data[k], list)]
     batch_sizes = [row["batch_size"] for row in data[layers[0]]]
 
     def fmt(v) -> str:
@@ -147,6 +149,17 @@ def generate_report(results_path: str = "bench_results.json") -> str:
         ["comparison"] + [str(b) for b in batch_sizes], diff_rows
     ).replace("<table>", "<table class='diff'>")
 
+    # --- environment table ---
+    env_table = ""
+    if "env" in data:
+        env_rows = [
+            [k, json.dumps(v) if isinstance(v, (dict, list)) else str(v)]
+            for k, v in data["env"].items()
+        ]
+        env_table = "<h2>Environment</h2>\n" + table(["key", "value"], env_rows).replace(
+            "<table>", "<table class='env'>"
+        )
+
     style = (
         "body{font-family:system-ui,sans-serif;margin:2rem;color:#222}"
         "h2{margin-top:1.5rem}"
@@ -155,12 +168,14 @@ def generate_report(results_path: str = "bench_results.json") -> str:
         "th{background:#f4f4f4}"
         "td.layer,th:first-child{text-align:left}"
         "table.diff td:first-child{text-align:left}"
+        "table.env td{text-align:left;font-family:ui-monospace,monospace;font-size:0.9em}"
+        "table.env td:last-child{max-width:60ch;overflow-wrap:anywhere}"
     )
 
     html = (
         f"<!DOCTYPE html><html><head><meta charset='utf-8'>"
         f"<title>Benchmark results</title><style>{style}</style></head>"
-        f"<body>\n<h1>Benchmark results</h1>\n{layer_tables}{diff_table}\n</body></html>"
+        f"<body>\n<h1>Benchmark results</h1>\n{layer_tables}{diff_table}\n{env_table}\n</body></html>"
     )
     with open("bench_results.html", "w") as f:
         f.write(html)
@@ -169,11 +184,20 @@ def generate_report(results_path: str = "bench_results.json") -> str:
     return html
 
 def run_benchs(sample_size:int = 5) -> dict:
-    results = {}
+    env = bench_env.collect_env(
+        batch_sizes=BATCH_SIZES,
+        sample_size=sample_size,
+        binary=LINUX_BINARY_ID,
+    )
+    throttle_before = bench_env.cpu_throttle_stats()
+
+    results = {"env": env}
     results["L0"] = bench_01(init_l0, inner_l0, sample_size)
     results["L1"] = bench_01(init_l1, inner_l1, sample_size)
     results["L2"] = bench_23("http://localhost:8000/api", sample_size)
     #L3 is seperate, run locally
+
+    env["cpu_throttle"] = bench_env.throttle_delta(throttle_before, bench_env.cpu_throttle_stats())
 
     print('benchmark done')
     with open("bench_results.json", "w") as f:
@@ -184,7 +208,7 @@ def run_benchs(sample_size:int = 5) -> dict:
     
 if __name__ == "__main__":
     REMOTE_API_URL = "https://pydrogui.onrender.com/api"
-    SAMPLE_SIZE = 5
+    SAMPLE_SIZE = 2
     
     # get the bench results for L0-2 as json from remote API
     print('fetching remote bench results')
