@@ -1,13 +1,17 @@
 '''
-L0 run
-L1 machine.run_for_steps
-L2 /api/step-mem
-L3 /api/step-mem remote
+L0        run                     in-process, local
+L1        machine.run_for_steps   in-process, local
+L2        /api/step-mem           local API over loopback
+L2_remote /api/step-mem           same code path, executed on the deployed instance
+L3        /api/step-mem           local client -> deployed instance, over the internet
+
+L0-L2 share a machine and are directly comparable. L2_remote and L3 share the
+deployed instance and are directly comparable. Across that boundary the hardware
+and the container CPU quota differ, so those layers are not comparable.
 '''
 import time
 import requests
 import json
-import os
 from _pydrofoil import RISCV64
 from machine import Machine
 import statistics
@@ -21,6 +25,17 @@ LINUX_BINARY = '/app/static/binary_examples/linux_kernel.bbl'
 LINUX_BINARY_ID = "example:linux_kernel.bbl"
 ROUNDING = 5
 ROUND = True
+
+LOCAL_API_URL = "http://localhost:8000/api"
+REMOTE_API_URL = "https://pydrogui.onrender.com/api"
+
+# Only pairs that ran on the same machine. See module docstring.
+COMPARISONS = (
+    ('L1', 'L0'),
+    ('L2', 'L0'),
+    ('L2', 'L1'),
+    ('L3', 'L2_remote'),
+)
 
 def _round(value):
     if ROUND:
@@ -149,16 +164,16 @@ def generate_report(results_path: str = "bench_results.json") -> str:
         ["comparison"] + [str(b) for b in batch_sizes], diff_rows
     ).replace("<table>", "<table class='diff'>")
 
-    # --- environment table ---
+    # --- environment tables, one per machine ---
     env_table = ""
-    if "env" in data:
+    for machine, env in data.get("env", {}).items():
         env_rows = [
             [k, json.dumps(v) if isinstance(v, (dict, list)) else str(v)]
-            for k, v in data["env"].items()
+            for k, v in env.items()
         ]
-        env_table = "<h2>Environment</h2>\n" + table(["key", "value"], env_rows).replace(
-            "<table>", "<table class='env'>"
-        )
+        env_table += f"<h2>Environment ({machine})</h2>\n" + table(
+            ["key", "value"], env_rows
+        ).replace("<table>", "<table class='env'>")
 
     style = (
         "body{font-family:system-ui,sans-serif;margin:2rem;color:#222}"
@@ -183,7 +198,25 @@ def generate_report(results_path: str = "bench_results.json") -> str:
     print("report written to bench_results.html")
     return html
 
-def run_benchs(sample_size:int = 5) -> dict:
+def compute_differences(results:dict) -> dict:
+    '''
+    Median deltas for the layer pairs listed in COMPARISONS.
+    '''
+    differences = {}
+    for layer, other_layer in COMPARISONS:
+        deltas = []
+        for i in range(len(results[layer])):
+            batch_size = results[layer][i]['batch_size']
+            assert batch_size == results[other_layer][i]['batch_size'], "Batch sizes do not match"
+
+            diff = results[layer][i]['median'] - results[other_layer][i]['median']
+            deltas.append({str(batch_size): _round(diff)})
+        differences[f"{layer} - {other_layer}"] = deltas
+    return differences
+
+
+def run_benchs(sample_size:int = 5, api_url:str = LOCAL_API_URL, save_path:str | None = None, remote:bool = True) -> dict:
+
     env = bench_env.collect_env(
         batch_sizes=BATCH_SIZES,
         sample_size=sample_size,
@@ -192,49 +225,46 @@ def run_benchs(sample_size:int = 5) -> dict:
     throttle_before = bench_env.cpu_throttle_stats()
 
     results = {"env": env}
-    results["L0"] = bench_01(init_l0, inner_l0, sample_size)
-    results["L1"] = bench_01(init_l1, inner_l1, sample_size)
-    results["L2"] = bench_23("http://localhost:8000/api", sample_size)
-    #L3 is seperate, run locally
+    if not remote:
+        results["L0"] = bench_01(init_l0, inner_l0, sample_size)
+        results["L1"] = bench_01(init_l1, inner_l1, sample_size)
+    results["L2"] = bench_23(api_url, sample_size)
 
     env["cpu_throttle"] = bench_env.throttle_delta(throttle_before, bench_env.cpu_throttle_stats())
 
     print('benchmark done')
-    with open("bench_results.json", "w") as f:
-        json.dump(results, f, indent=2)
+    if save_path:
+        with open(save_path, "w") as f:
+            json.dump(results, f, indent=2)
 
     return results
-    
-    
-if __name__ == "__main__":
-    REMOTE_API_URL = "https://pydrogui.onrender.com/api"
-    SAMPLE_SIZE = 2
-    
-    # get the bench results for L0-2 as json from remote API
-    print('fetching remote bench results')
-    r = requests.get(f"{REMOTE_API_URL}/bench?sample_size={SAMPLE_SIZE}")
-    r.raise_for_status()
-    results = r.json()
-    print('remote bench results fetched')
-    results['L3'] = bench_23(REMOTE_API_URL, sample_size=SAMPLE_SIZE)  # run L3 locally
-    
-    # Compare each layer with the previous layers
-    results['differences'] = {}
-    layers = ['L0', 'L1', 'L2', 'L3']
 
-    for n, layer in enumerate(layers[1:], start=1):
-        for other_layer in layers[:n]:
-            differences = []
-            for i in range(len(results[layer])):
-                batch_size = results[layer][i]['batch_size']
-                assert batch_size == results[other_layer][i]['batch_size'], "Batch sizes do not match"
-                
-                diff = results[layer][i]['median'] - results[other_layer][i]['median']
-                differences.append({str(batch_size):  _round(diff)})
-            results['differences'][f"{layer} - {other_layer}"] = differences
-    
-    with open("bench_results.json", "w") as f:
-        json.dump(results, f, indent=2)        
-    
-    generate_report("bench_results.json")
+
+if __name__ == "__main__":
+    SAMPLE_SIZE = 2
+    RESULTS_PATH = "bench_results.json"
+
+    # L0-L2 on this machine
+    print('running local benchmarks (L0, L1, L2)')
+    results = run_benchs(SAMPLE_SIZE, api_url=LOCAL_API_URL, remote=False)
+    results['env'] = {"local": results['env']}
+
+    print('fetching remote bench results')
+    r = requests.get(f"{REMOTE_API_URL}/bench", params={"sample_size": SAMPLE_SIZE})
+    r.raise_for_status()
+    remote = r.json()
+    print('remote bench results fetched')
+    results['L2_remote'] = remote['L2']
+    results['env']['remote'] = remote['env']
+
+    # L3: this client -> deployed instance, over the public internet.
+    print('running L3 against the deployed instance')
+    results['L3'] = bench_23(REMOTE_API_URL, sample_size=SAMPLE_SIZE)
+
+    results['differences'] = compute_differences(results)
+
+    with open(RESULTS_PATH, "w") as f:
+        json.dump(results, f, indent=2)
+
+    generate_report(RESULTS_PATH)
     print('report generated')
