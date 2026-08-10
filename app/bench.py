@@ -1,13 +1,23 @@
 '''
-L0        run                     in-process, local
+L0        step_monitor_mem loop   in-process, local
 L1        machine.run_for_steps   in-process, local
-L2        /api/step-mem           local API over loopback
-L2_remote /api/step-mem           same code path, executed on the deployed instance
-L3        /api/step-mem           local client -> deployed instance, over the internet
+L2        /api/run                local API
+L3        /api/run                local API + the GET requests the frontend
+                                  issues afterwards to refresh its views
 
-L0-L2 share a machine and are directly comparable. L2_remote and L3 share the
-deployed instance and are directly comparable. Across that boundary the hardware
-and the container CPU quota differ, so those layers are not comparable.
+All four layers run in this process against the local API, so every pair is
+comparable.
+
+L3 replays what the frontend does after a run completes:
+  GET /api/memory-history                          accumulated memory access log
+  GET /api/read-registers-batch?reg_names=all      standard register set
+  GET /api/disassemble-last-instruction            instruction just executed
+  GET /api/read-term?offset=<offset>               guest console bytes since last read
+  GET /api/read-memory-page/<addr>                 memory page currently on screen
+The GETs are issued sequentially, so L3 - L2 is the total server cost of a
+view refresh rather than the wall-clock the browser sees when it parallelises.
+
+Every recorded timing is in milliseconds; variances are therefore in ms².
 '''
 import time
 import requests
@@ -27,20 +37,25 @@ ROUNDING = 5
 ROUND = True
 
 LOCAL_API_URL = "http://localhost:8000/api"
-REMOTE_API_URL = "https://pydrogui.onrender.com/api"
 
-# Only pairs that ran on the same machine. See module docstring.
+# Address the memory view sits on by default (frontend falls back to 0x0).
+MEM_PAGE_ADDR = "0x0"
+
 COMPARISONS = (
     ('L1', 'L0'),
     ('L2', 'L0'),
     ('L2', 'L1'),
-    ('L3', 'L2_remote'),
+    ('L3', 'L2'),
 )
 
 def _round(value):
     if ROUND:
         return round(value, ROUNDING)
     return value
+
+def _ms(seconds:float) -> float:
+    '''perf_counter deltas are seconds; every recorded timing is milliseconds.'''
+    return _round(seconds * 1000)
 
 def init_l0(): 
     m = RISCV64(LINUX_BINARY, dtb=True)
@@ -58,7 +73,7 @@ def inner_l1(machine, batch_size):
 
     machine.run_for_steps(batch_size)
  
-def init_l23(api_url:str): 
+def init_l23(api_url:str):
     r = requests.post(f"{api_url}/sessions?binary_id={LINUX_BINARY_ID}")
     r.raise_for_status()
     return r.json()['session_id']
@@ -67,22 +82,46 @@ def cleanup_l23(api_url:str, sid:str):
     r = requests.delete(f"{api_url}/sessions/{sid}")
     r.raise_for_status()
 
-def bench_23(api_url:str, sample_size:int = 5) -> list:
+def update_views(api_url:str, headers:dict, term_offset:int = 0) -> int:
+    '''
+    The GETs the frontend fires after a run to refresh its views.
+    Returns the new terminal offset, as the frontend tracks it.
+    '''
+    for path in (
+        "/memory-history",
+        "/read-registers-batch?reg_names=all",
+        "/disassemble-last-instruction",
+    ):
+        r = requests.get(f"{api_url}{path}", headers=headers)
+        r.raise_for_status()
+
+    r = requests.get(f"{api_url}/read-term?offset={term_offset}", headers=headers)
+    term_offset = r.json()["next_offset"]
+
+    r = requests.get(f"{api_url}/read-memory-page/{MEM_PAGE_ADDR}", headers=headers)
+    return term_offset
+
+def bench_23(api_url:str, sample_size:int = 5, updates:bool = False) -> list:
+    '''Time POST /run per batch size; with updates=True the view-refresh GETs count too.'''
     # test api call
     r = requests.get(f"{api_url}/binaries/examples")
     r.raise_for_status()
-    
+
     results = []
     for batch_size in BATCH_SIZES:
         batch_results = {"batch_size": batch_size, "times": []}
         for i in range(sample_size+1):
             sid = init_l23(api_url)
+            headers = {"X-Session-Id": sid}
             start = time.perf_counter()
-            r = requests.post(f"{api_url}/run?steps={batch_size}", headers={"X-Session-Id": sid})
+            r = requests.post(f"{api_url}/run?steps={batch_size}", headers=headers)
+            if updates:
+                update_views(api_url, headers)
             elapsed_time = time.perf_counter() - start
-            r.raise_for_status()
             if i > 0:  # Skip the first run for warm-up
-                batch_results["times"].append(_round(elapsed_time))
+                batch_results["times"].append(_ms(elapsed_time))
+            else:
+                r.raise_for_status()
             cleanup_l23(api_url, sid)
         batch_results["median"] = _round(statistics.median(batch_results["times"]))
         batch_results["mean"] = _round(statistics.mean(batch_results["times"]))
@@ -104,7 +143,7 @@ def bench_01(init_func:Callable, inner_func:Callable, sample_size:int = 5) -> li
             elapsed_time = time.perf_counter() - start_time
             del machine
             if i > 0:  # Skip the first run for warm-up
-                batch_results["times"].append(_round(elapsed_time))
+                batch_results["times"].append(_ms(elapsed_time))
         batch_results["median"] = _round(statistics.median(batch_results["times"]))
         batch_results["mean"] = _round(statistics.mean(batch_results["times"]))
         batch_results['variance'] = 0
@@ -135,7 +174,7 @@ def generate_report(results_path: str = "bench_results.json") -> str:
         return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
 
     # --- combined per-layer table (layer name spans its batch rows) ---
-    headers = ["layer", "batch_size", "median (s)", "mean (s)", "variance"]
+    headers = ["layer", "batch_size", "median (ms)", "mean (ms)", "variance (ms²)"]
     head = "".join(f"<th>{h}</th>" for h in headers)
     body = ""
     for layer in layers:
@@ -160,20 +199,18 @@ def generate_report(results_path: str = "bench_results.json") -> str:
         [pair] + [fmt(list(d.values())[0]) for d in diffs]
         for pair, diffs in data["differences"].items()
     ]
-    diff_table = "<h2>Differences (median, s)</h2>\n" + table(
+    diff_table = "<h2>Differences (median, ms)</h2>\n" + table(
         ["comparison"] + [str(b) for b in batch_sizes], diff_rows
     ).replace("<table>", "<table class='diff'>")
 
-    # --- environment tables, one per machine ---
-    env_table = ""
-    for machine, env in data.get("env", {}).items():
-        env_rows = [
-            [k, json.dumps(v) if isinstance(v, (dict, list)) else str(v)]
-            for k, v in env.items()
-        ]
-        env_table += f"<h2>Environment ({machine})</h2>\n" + table(
-            ["key", "value"], env_rows
-        ).replace("<table>", "<table class='env'>")
+    # --- environment table ---
+    env_rows = [
+        [k, json.dumps(v) if isinstance(v, (dict, list)) else str(v)]
+        for k, v in data.get("env", {}).items()
+    ]
+    env_table = "<h2>Environment</h2>\n" + table(
+        ["key", "value"], env_rows
+    ).replace("<table>", "<table class='env'>")
 
     style = (
         "body{font-family:system-ui,sans-serif;margin:2rem;color:#222}"
@@ -200,7 +237,7 @@ def generate_report(results_path: str = "bench_results.json") -> str:
 
 def compute_differences(results:dict) -> dict:
     '''
-    Median deltas for the layer pairs listed in COMPARISONS.
+    Median deltas in milliseconds for the layer pairs listed in COMPARISONS.
     '''
     differences = {}
     for layer, other_layer in COMPARISONS:
@@ -215,22 +252,25 @@ def compute_differences(results:dict) -> dict:
     return differences
 
 
-def run_benchs(sample_size:int = 5, api_url:str = LOCAL_API_URL, save_path:str | None = None, remote:bool = True) -> dict:
+def run_benchs(sample_size:int = 5, api_url:str = LOCAL_API_URL, save_path:str | None = None) -> dict:
 
     env = bench_env.collect_env(
         batch_sizes=BATCH_SIZES,
         sample_size=sample_size,
         binary=LINUX_BINARY_ID,
+        time_unit="ms",
     )
-    throttle_before = bench_env.cpu_throttle_stats()
-
     results = {"env": env}
-    if not remote:
-        results["L0"] = bench_01(init_l0, inner_l0, sample_size)
-        results["L1"] = bench_01(init_l1, inner_l1, sample_size)
+    print('running L0')
+    results["L0"] = bench_01(init_l0, inner_l0, sample_size)
+    print('running L1')
+    results["L1"] = bench_01(init_l1, inner_l1, sample_size)
+    print('running L2')
     results["L2"] = bench_23(api_url, sample_size)
+    print('running L3')
+    results["L3"] = bench_23(api_url, sample_size, updates=True)
 
-    env["cpu_throttle"] = bench_env.throttle_delta(throttle_before, bench_env.cpu_throttle_stats())
+    results['differences'] = compute_differences(results)
 
     print('benchmark done')
     if save_path:
@@ -241,30 +281,10 @@ def run_benchs(sample_size:int = 5, api_url:str = LOCAL_API_URL, save_path:str |
 
 
 if __name__ == "__main__":
-    SAMPLE_SIZE = 2
+    SAMPLE_SIZE = 10
     RESULTS_PATH = "bench_results.json"
 
-    # L0-L2 on this machine
-    print('running local benchmarks (L0, L1, L2)')
-    results = run_benchs(SAMPLE_SIZE, api_url=LOCAL_API_URL, remote=False)
-    results['env'] = {"local": results['env']}
-
-    print('fetching remote bench results')
-    r = requests.get(f"{REMOTE_API_URL}/bench", params={"sample_size": SAMPLE_SIZE})
-    r.raise_for_status()
-    remote = r.json()
-    print('remote bench results fetched')
-    results['L2_remote'] = remote['L2']
-    results['env']['remote'] = remote['env']
-
-    # L3: this client -> deployed instance, over the public internet.
-    print('running L3 against the deployed instance')
-    results['L3'] = bench_23(REMOTE_API_URL, sample_size=SAMPLE_SIZE)
-
-    results['differences'] = compute_differences(results)
-
-    with open(RESULTS_PATH, "w") as f:
-        json.dump(results, f, indent=2)
+    run_benchs(SAMPLE_SIZE, api_url=LOCAL_API_URL, save_path=RESULTS_PATH)
 
     generate_report(RESULTS_PATH)
     print('report generated')

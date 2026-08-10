@@ -23,8 +23,6 @@ app = fastapi.FastAPI(
 
 api = APIRouter(prefix='/api')
 
-BENCH_ACTIVE = os.getenv("BENCH_ACTIVE", "0").strip().lower() in ("1", "true", "yes", "on")
-
 ALL_REG_NAMES: list[str] = [
     'pc', 'nextpc', 'instbits', 'cur_privilege',
     *[f'x{i}' for i in range(1, 32)],
@@ -76,20 +74,6 @@ def test_page() -> FileResponse:
 @api.get('/hello')
 def hello() -> str:
     return 'Hello, world!'
-
-
-@api.get('/bench', tags=["Benchmarks"])
-def run_bench(sample_size: int = 5) -> dict:
-    if not BENCH_ACTIVE:
-        raise HTTPException(
-            status_code=403,
-            detail="Benchmark endpoint is disabled. Set the BENCH_ACTIVE=1 environment variable",
-        )
-    try:
-        import bench
-        return bench.run_benchs(sample_size=sample_size)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @api.get('/disassemble-last-instruction', tags=["Execution Control"])

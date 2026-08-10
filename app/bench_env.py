@@ -11,21 +11,6 @@ import platform
 import sys
 import time
 
-RENDER_ENV_KEYS = (
-    "RENDER",
-    "RENDER_SERVICE_ID",
-    "RENDER_SERVICE_NAME",
-    "RENDER_SERVICE_TYPE",
-    "RENDER_INSTANCE_ID",
-    "RENDER_GIT_COMMIT",
-    "RENDER_GIT_BRANCH",
-    "RENDER_GIT_REPO_SLUG",
-    "RENDER_REGION",
-)
-
-THROTTLE_KEYS = ("nr_periods", "nr_throttled", "throttled_usec")
-
-
 def _read(path: str):
     '''Read a procfs/sysfs file, or None if the runtime does not expose it.'''
     try:
@@ -93,33 +78,6 @@ def memory_limit() -> dict:
     }
 
 
-def cpu_throttle_stats() -> dict:
-    '''
-    cgroup v2 CPU throttling counters, cumulative since container start.
-
-    Sample before and after a benchmark: a rising nr_throttled means the
-    scheduler suspended the container mid-run and wall-clock timings measure
-    the host's contention rather than the simulator.
-    '''
-    stat = _read("/sys/fs/cgroup/cpu.stat")
-    if not stat:
-        return {}
-    out = {}
-    for line in stat.splitlines():
-        key, _, value = line.partition(" ")
-        if key in THROTTLE_KEYS:
-            out[key] = int(value)
-    return out
-
-
-def throttle_delta(before: dict, after: dict) -> dict:
-    '''Throttling that happened between two cpu_throttle_stats() samples.'''
-    if not before or not after:
-        return {}
-    delta = {k: after.get(k, 0) - before.get(k, 0) for k in THROTTLE_KEYS if k in after}
-    return {"before": before, "after": after, "delta": delta}
-
-
 def collect_env(**extra) -> dict:
     '''Full environment record. Extra keyword arguments are merged in as-is.'''
     env = {
@@ -132,7 +90,6 @@ def collect_env(**extra) -> dict:
         "python_implementation": platform.python_implementation(),
         "python_version": sys.version.replace("\n", " "),
         "pypy_version": _pypy_version(),
-        "render": {k: os.getenv(k) for k in RENDER_ENV_KEYS if os.getenv(k)},
     }
     env.update(cpu_quota())
     env.update(memory_limit())
