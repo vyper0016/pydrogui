@@ -47,3 +47,5 @@ test_commands.txt
 app/gr.py
 app/bench_results.json
 app/bench_results.html
+app/bench_per_step.pdf
+app/bench_per_step.png
