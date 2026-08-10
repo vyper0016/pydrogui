@@ -49,3 +49,7 @@ app/bench_results.json
 app/bench_results.html
 app/bench_per_step.pdf
 app/bench_per_step.png
+app/bench-results.tex
+
+# Machine-specific output paths into the thesis checkout (see paths.example.json)
+app/paths.json

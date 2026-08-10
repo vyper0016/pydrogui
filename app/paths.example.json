@@ -1,0 +1,4 @@
+{
+  "bench_results_tex": "/absolute/path/to/thesis/bench-results.tex",
+  "bench_figure_pdf": "/absolute/path/to/thesis/bench_per_step.pdf"
+}

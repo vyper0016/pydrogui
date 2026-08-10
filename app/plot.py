@@ -36,6 +36,8 @@ import argparse
 import json
 import os
 
+import paths
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -61,7 +63,7 @@ LAYER_CAPTIONS = {
     "L0": "L0  in-process, step loop",
     "L1": "L1  in-process, run_for_steps",
     "L2": "L2  local API",
-    "L3": "L3  local API + view refresh",
+    "L3": "L3  local API + update requests",
 }
 
 # The thesis body is 12pt; figure labels sit a notch under it.
@@ -258,6 +260,9 @@ def figure_per_step(layers: list[str], series: dict, out_base: str,
         fig.savefig(path, dpi=dpi)
         written.append(path)
     plt.close(fig)
+    # The thesis \includegraphics reaches for the vector copy; the PNG stays
+    # here as a preview.
+    paths.publish(written[0], "bench_figure_pdf")
     return written
 
 

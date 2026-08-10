@@ -27,10 +27,11 @@ from machine import Machine
 import statistics
 from typing import Callable
 import bench_env
+from bench_generators import generate_report
 
 #/pypy/pypy-pydrofoil-scripting-experimental/bin/pypy /app/bench.py
 
-BATCH_SIZES = [1, 100, 100_000, 200_000, 1_500_000]
+BATCH_SIZES = [1, 10, 100, 1000, 10_000, 100_000, 200_000, 1_000_000, 2_000_000]
 LINUX_BINARY = '/app/static/binary_examples/linux_kernel.bbl'
 LINUX_BINARY_ID = "example:linux_kernel.bbl"
 ROUNDING = 5
@@ -153,88 +154,6 @@ def bench_01(init_func:Callable, inner_func:Callable, sample_size:int = 5) -> li
 
     return results
 
-def generate_report(results_path: str = "bench_results.json") -> str:
-    '''generate an HTML report from the benchmark results JSON file - AI generated function code'''
-    with open(results_path) as f:
-        data = json.load(f)
-
-    # layer entries are lists of batch results; "env" and "differences" are not
-    layers = [k for k in data if isinstance(data[k], list)]
-    batch_sizes = [row["batch_size"] for row in data[layers[0]]]
-
-    def fmt(v) -> str:
-        return f"{v:.6g}"
-
-    def table(headers: list[str], rows: list[list[str]]) -> str:
-        head = "".join(f"<th>{h}</th>" for h in headers)
-        body = "".join(
-            "<tr>" + "".join(f"<td>{c}</td>" for c in row) + "</tr>"
-            for row in rows
-        )
-        return f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
-
-    # --- combined per-layer table (layer name spans its batch rows) ---
-    headers = ["layer", "batch_size", "median (ms)", "mean (ms)", "variance (ms²)"]
-    head = "".join(f"<th>{h}</th>" for h in headers)
-    body = ""
-    for layer in layers:
-        rows = data[layer]
-        for i, r in enumerate(rows):
-            cells = ""
-            if i == 0:
-                cells += f"<td class='layer'>{layer}</td>" if len(rows) == 1 else \
-                    f"<td class='layer' rowspan='{len(rows)}'>{layer}</td>"
-            cells += (
-                f"<td>{r['batch_size']}</td><td>{fmt(r['median'])}</td>"
-                f"<td>{fmt(r['mean'])}</td><td>{fmt(r['variance'])}</td>"
-            )
-            body += f"<tr>{cells}</tr>"
-    layer_tables = (
-        "<h2>Batch results</h2>\n"
-        f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>\n"
-    )
-
-    # --- differences table ---
-    diff_rows = [
-        [pair] + [fmt(list(d.values())[0]) for d in diffs]
-        for pair, diffs in data["differences"].items()
-    ]
-    diff_table = "<h2>Differences (median, ms)</h2>\n" + table(
-        ["comparison"] + [str(b) for b in batch_sizes], diff_rows
-    ).replace("<table>", "<table class='diff'>")
-
-    # --- environment table ---
-    env_rows = [
-        [k, json.dumps(v) if isinstance(v, (dict, list)) else str(v)]
-        for k, v in data.get("env", {}).items()
-    ]
-    env_table = "<h2>Environment</h2>\n" + table(
-        ["key", "value"], env_rows
-    ).replace("<table>", "<table class='env'>")
-
-    style = (
-        "body{font-family:system-ui,sans-serif;margin:2rem;color:#222}"
-        "h2{margin-top:1.5rem}"
-        "table{border-collapse:collapse;margin-bottom:1rem}"
-        "th,td{border:1px solid #ccc;padding:4px 10px;text-align:right}"
-        "th{background:#f4f4f4}"
-        "td.layer,th:first-child{text-align:left}"
-        "table.diff td:first-child{text-align:left}"
-        "table.env td{text-align:left;font-family:ui-monospace,monospace;font-size:0.9em}"
-        "table.env td:last-child{max-width:60ch;overflow-wrap:anywhere}"
-    )
-
-    html = (
-        f"<!DOCTYPE html><html><head><meta charset='utf-8'>"
-        f"<title>Benchmark results</title><style>{style}</style></head>"
-        f"<body>\n<h1>Benchmark results</h1>\n{layer_tables}{diff_table}\n{env_table}\n</body></html>"
-    )
-    with open("bench_results.html", "w") as f:
-        f.write(html)
-
-    print("report written to bench_results.html")
-    return html
-
 def compute_differences(results:dict) -> dict:
     '''
     Median deltas in milliseconds for the layer pairs listed in COMPARISONS.
@@ -281,9 +200,9 @@ def run_benchs(sample_size:int = 5, api_url:str = LOCAL_API_URL, save_path:str |
 
 
 if __name__ == "__main__":
-    SAMPLE_SIZE = 10
+    SAMPLE_SIZE = 50
     RESULTS_PATH = "bench_results.json"
-
+    print(f'running benchmark.\nbatch_sizes={BATCH_SIZES}\nsample_size={SAMPLE_SIZE}')
     run_benchs(SAMPLE_SIZE, api_url=LOCAL_API_URL, save_path=RESULTS_PATH)
 
     generate_report(RESULTS_PATH)
