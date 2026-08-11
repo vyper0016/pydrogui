@@ -100,7 +100,7 @@ def generate_tex(results_path: str = "bench_results.json", output_path='bench-re
         data = json.load(f)
     
     layers = [f'L{i}' for i in range(4)]
-    batch_sizes = [1, 100, 10_000, 200_000, 1_000_000, 2_000_000]
+    batch_sizes = [1, 100, 10_000, 200_000, 1_000_000, 5_000_000]
     tex = r'''
 \begin{table}[htbp]
     \centering
@@ -115,7 +115,7 @@ def generate_tex(results_path: str = "bench_results.json", output_path='bench-re
         i = next(i for i, r in enumerate(data[layers[0]]) if r['batch_size'] == bs)
         for layer in layers:
             assert data[layer][i]['batch_size'] == bs, "Batch sizes do not match"
-            tex += f' & {data[layer][i]["median"]:.3f}'
+            tex += f' & {data[layer][i]["median"]:.2f}'
         tex += ' \\\\\n'
     tex += r'''
         \bottomrule
@@ -125,6 +125,39 @@ def generate_tex(results_path: str = "bench_results.json", output_path='bench-re
     \label{tab:batch-wallclock}
 \end{table}
 '''
+
+    # What each step up the stack costs, as a factor rather than a difference:
+    # the vertical gap between two lines on the logarithmic axes of the figure
+    # is their ratio. data["differences"] holds subtractions, so the ratios are
+    # taken from the medians here.
+    medians = {
+        layer: {r['batch_size']: r['median'] for r in data[layer]}
+        for layer in layers
+    }
+    steps = list(zip(layers[1:], layers))
+    tex += r'''
+\begin{table}[htbp]
+    \centering
+    \begin{tabular}{@{}lrrr@{}}
+        \toprule
+        Batch size $N$ & $L_1/L_0$ & $L_2/L_1$ & $L_3/L_2$ \\
+        \midrule
+'''
+    for bs in batch_sizes:
+        tex += f'\n        {bs}'
+        for upper, lower in steps:
+            tex += f' & {medians[upper][bs] / medians[lower][bs]:.2f}'
+        tex += ' \\\\\n'
+    tex += r'''
+        \bottomrule
+    \end{tabular}
+    \caption{Cost of each step up the stack as a factor, $L_i/L_{i-1}$, from
+    the medians of \cref{tab:batch-wallclock}. A value of 1 means the step is
+    free at that batch size.}%
+    \label{tab:batch-ratios}
+\end{table}
+'''
+
     with open(output_path, 'w') as f:
         f.write(tex)
     print(f"TeX tables written to {output_path}")

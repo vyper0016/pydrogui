@@ -31,7 +31,7 @@ from bench_generators import generate_report
 
 #/pypy/pypy-pydrofoil-scripting-experimental/bin/pypy /app/bench.py
 
-BATCH_SIZES = [1, 10, 100, 1000, 10_000, 100_000, 200_000, 1_000_000, 2_000_000]
+BATCH_SIZES = [1, 10, 100, 1000, 10_000, 100_000, 200_000, 1_000_000, 5_000_000]
 LINUX_BINARY = '/app/static/binary_examples/linux_kernel.bbl'
 LINUX_BINARY_ID = "example:linux_kernel.bbl"
 ROUNDING = 5
@@ -200,7 +200,7 @@ def run_benchs(sample_size:int = 5, api_url:str = LOCAL_API_URL, save_path:str |
 
 
 if __name__ == "__main__":
-    SAMPLE_SIZE = 50
+    SAMPLE_SIZE = 30
     RESULTS_PATH = "bench_results.json"
     print(f'running benchmark.\nbatch_sizes={BATCH_SIZES}\nsample_size={SAMPLE_SIZE}')
     run_benchs(SAMPLE_SIZE, api_url=LOCAL_API_URL, save_path=RESULTS_PATH)

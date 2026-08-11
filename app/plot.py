@@ -9,10 +9,11 @@ bench.py writes:
 
 bench.py records every timing in milliseconds; the axes are labelled to match.
 
-One figure, bench_per_step: median milliseconds *per simulated instruction*,
-log-log. The layers converge on the right (steady-state simulation cost,
-identical everywhere) and fan out on the left, where the per-call overhead is
-amortised over a single step -- which is what shows the overhead is a constant.
+One figure, bench_per_batch: the medians as measured, milliseconds *per batch*,
+log-log. Each layer is flat on the left, where the fixed per-call cost dominates
+and the batch is free, then turns onto a slope of one once the simulation work
+outgrows it. The height of the flat part *is* the overhead, read straight off
+the axis rather than inferred from a division.
 
 Print conventions this follows, because the output goes into the thesis in
 ../../latex (scrbook, a4paper, 12pt, DIV=14 -> \\textwidth 469.47pt = 16.5cm,
@@ -21,7 +22,7 @@ body set in Times by newtxtext/newtxmath, built with pdflatex):
     16.5 = one full \\textwidth). Include it *without* a [width=...] key:
     scaling in LaTeX resizes the type along with the drawing, and the labels
     stop matching the body text.
-        \\includegraphics{fig/bench_per_step}
+        \\includegraphics{fig/bench_per_batch}
     For a half-width figure re-render with --width 8.25, do not scale.
   * Times at 10 pt against the 12 pt body, with Times-metric math for the
     10^n exponents -- the same faces newtxtext and newtxmath set.
@@ -228,20 +229,18 @@ def _direct_labels(ax, anchors: list[tuple[str, float, float]]) -> None:
         )
 
 
-def figure_per_step(layers: list[str], series: dict, out_base: str,
-                    width_cm: float, dpi: int) -> list[str]:
+def figure_per_batch(layers: list[str], series: dict, out_base: str,
+                     width_cm: float, dpi: int) -> list[str]:
+    '''The medians as bench.py measured them: one call, whole batch.'''
     width_in = width_cm / CM_PER_INCH
     fig, ax = plt.subplots(figsize=(width_in, width_in * 0.62))
-    _style_axes(
-        ax,
-        "batch size (instructions)",
-        "median time per instruction (ms)",
-    )
-    _plot(ax, layers, series, lambda batch, median: median / batch)
+    _style_axes(ax, "batch size (instructions)", "median time per batch (ms)")
+    _plot(ax, layers, series, lambda _batch, median: median)
 
-    # Upper right is the empty corner: every layer descends left to right.
+    # The curves rise left to right, so the upper left is the free corner --
+    # above L3's flat overhead segment and clear of the direct labels.
     legend = ax.legend(
-        loc="upper right",
+        loc="upper left",
         frameon=True,
         framealpha=1.0,
         borderpad=0.5,
@@ -285,8 +284,8 @@ def main() -> None:
     os.makedirs(args.outdir, exist_ok=True)
 
     use_thesis_style()
-    written = figure_per_step(
-        layers, series, os.path.join(args.outdir, "bench_per_step"),
+    written = figure_per_batch(
+        layers, series, os.path.join(args.outdir, "bench_per_batch"),
         args.width, args.dpi,
     )
     for path in written:

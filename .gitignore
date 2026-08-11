@@ -26,6 +26,9 @@ frontend-pydrogui/*.local
 pypy-pydrofoil-scripting-experimental.tar.bz2
 riscv/
 
+# Comparison tool checkout for the throughput benchmark (own git repo, own node_modules)
+.haozi/
+
 # OS
 .DS_Store
 Thumbs.db

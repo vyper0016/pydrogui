@@ -1,4 +1,6 @@
 {
   "bench_results_tex": "/absolute/path/to/thesis/bench-results.tex",
-  "bench_figure_pdf": "/absolute/path/to/thesis/bench_per_step.pdf"
+  "bench_figure_pdf": "/absolute/path/to/thesis/bench_per_batch.pdf",
+  "haozi_results_tex": "/absolute/path/to/thesis/compare-results.tex",
+  "haozi_figure_pdf": "/absolute/path/to/thesis/compare_ips.pdf"
 }
